@@ -3,7 +3,7 @@
 Run locally:  uvicorn app.api.main:app --reload   (from backend/)
 
 Auth is a placeholder for the MVP: the caller's name comes from the
-``X-User`` header. Storage is in memory until the PostgreSQL repository lands.
+``X-User`` header. Storage: PostgreSQL when DATABASE_URL is set, otherwise in memory.
 """
 from __future__ import annotations
 
@@ -15,7 +15,8 @@ from fastapi.responses import JSONResponse
 
 from ..domain import Client, EmployeeRecord, FilingStatus, PayrollRun
 from ..engine import Employee, RuleBook, SalaryStructure
-from ..repository import InMemoryRepository, NotFound
+from ..db import make_repository
+from ..repository import NotFound
 from ..services import MonthInput, PayrollService, ServiceError
 from ..services.compliance import overdue
 from . import schemas as s
@@ -25,7 +26,8 @@ app = FastAPI(title="Payroll + Compliance MVP", version="0.2.0")
 
 @lru_cache
 def get_service() -> PayrollService:
-    return PayrollService(InMemoryRepository(), RuleBook.load())
+    # PostgreSQL (or SQLite) when DATABASE_URL is set, otherwise in memory.
+    return PayrollService(make_repository(), RuleBook.load())
 
 
 def current_user(x_user: str = Header(..., description="Placeholder auth")) -> str:
