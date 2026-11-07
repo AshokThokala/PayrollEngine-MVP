@@ -7,21 +7,29 @@ run as software plus a done-for-you service. Launch state: **Telangana**.
 
 ```
 backend/
-  app/engine/   pure-Python payroll engine (no web or DB dependencies)
-  app/rules/    date-effective statutory rules as JSON (central + per state)
-  tests/        pytest suite for the engine
+  app/engine/     pure-Python payroll engine (no web or DB dependencies)
+  app/rules/      date-effective statutory rules as JSON (central + per state)
+  app/services/   payroll workflow (draft -> approved -> locked), compliance calendar
+  app/repository.py  storage interface + in-memory implementation
+  app/api/        FastAPI routes
+  tests/          pytest suite
 ```
 
-Planned next: FastAPI + PostgreSQL API, output files (payslip PDF, bank file, PF ECR),
+Planned next: PostgreSQL repository, output files (payslip PDF, bank file, PF ECR),
 and a React front end.
 
-## Run the tests
+## Run locally
 
 ```
 cd backend
-pip install pytest
-python -m pytest
+python -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt
+python -m pytest                       # engine, service and API tests
+uvicorn app.api.main:app --reload      # API docs at http://localhost:8000/docs
 ```
+
+Every write request needs an `X-User` header (placeholder until real login).
+A run must be approved by a different user from the one who prepared it.
 
 ## Design rules
 
