@@ -1,2 +1,8 @@
-# Engine has no runtime dependencies. Test tooling:
+# The engine and service layer have no runtime dependencies.
+# HTTP API:
+fastapi>=0.115
+uvicorn[standard]>=0.30
+pydantic>=2.7
+# Tests:
 pytest>=8
+httpx>=0.27
