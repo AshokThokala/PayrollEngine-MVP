@@ -3,6 +3,48 @@
 Payroll and statutory compliance (PF, ESI, Professional Tax, LWF, TDS) for small Indian firms,
 run as software plus a done-for-you service. Launch state: **Telangana**.
 
+## Run the whole app with Docker
+
+Needs Docker Desktop. From the repo root:
+```
+docker compose up -d --build
+```
+Open **http://localhost:8080**. That starts three containers:
+
+| Container | What | Port |
+| --- | --- | --- |
+| `web` | React UI served by nginx; forwards `/api/*` to the API | 8080 |
+| `api` | FastAPI; creates/updates tables on start-up | 8000 (docs at `/docs`) |
+| `db` | PostgreSQL 16; data kept in the `pgdata` volume | 5432 |
+
+Useful commands:
+```
+docker compose ps                 # what is running
+docker compose logs -f api        # API logs
+docker compose up -d --build      # rebuild after pulling new code
+docker compose down               # stop (data is kept)
+docker compose down -v            # stop and DELETE all data
+```
+
+### Using the UI
+1. **Clients** - add a client firm (state: Telangana).
+2. **Employees** - add employees with their monthly salary split; you are warned if basic + DA is under 50%.
+3. **Payroll runs** - pick a month and *Calculate draft*. Open payslips to see every line.
+   To approve, change **Acting as** (top right) to a different name - the preparer cannot approve.
+   Then *Lock run* to freeze it.
+4. **Compliance calendar** - locking creates PF, ESI, TDS, PT, LWF and Form 24Q items with due dates.
+   Enter the challan reference and mark them paid or filed. Overdue items are highlighted.
+
+"Acting as" is a placeholder for real login; it is recorded in the audit log.
+
+## Frontend development (without Docker)
+```
+cd frontend
+npm install
+npm run dev        # http://localhost:5173, forwards /api to http://localhost:8000
+```
+Run the API separately (see below).
+
 ## Structure
 
 ```
@@ -14,9 +56,11 @@ backend/
   app/db/         SQL repository (PostgreSQL / SQLite), migrations, migrate CLI
   app/api/        FastAPI routes
   tests/          pytest suite (runs against memory, SQLite and PostgreSQL)
+frontend/         React (Vite) UI, nginx config, Dockerfile
+docker-compose.yml  db + api + web
 ```
 
-Planned next: output files (payslip PDF, bank file, PF ECR) and a React front end.
+Planned next: output files (payslip PDF, bank file, PF ECR) and real login.
 
 ## Run locally
 
