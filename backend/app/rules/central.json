@@ -1,0 +1,67 @@
+{
+  "_note": "Central statutory rules. Every entry is date-effective. VERIFY with a practising CA before use with a live client.",
+  "pf": [
+    {
+      "valid_from": "2014-09-01",
+      "valid_to": "2026-09-16",
+      "wage_ceiling": 15000,
+      "employee_rate": 0.12,
+      "employer_rate": 0.12,
+      "eps_rate": 0.0833,
+      "edli_rate": 0.005,
+      "admin_rate": 0.005,
+      "source": "Pre-2026 EPF ceiling"
+    },
+    {
+      "valid_from": "2026-09-17",
+      "valid_to": null,
+      "wage_ceiling": 25000,
+      "employee_rate": 0.12,
+      "employer_rate": 0.12,
+      "eps_rate": 0.0833,
+      "edli_rate": 0.005,
+      "admin_rate": 0.005,
+      "source": "S.O. 5109(E) dated 17 Sep 2026"
+    }
+  ],
+  "esi": [
+    {
+      "valid_from": "2019-07-01",
+      "valid_to": null,
+      "eligibility_wage_limit": 21000,
+      "employee_rate": 0.0075,
+      "employer_rate": 0.0325,
+      "source": "ESIC rates from 1 Jul 2019 - VERIFY wage limit under Code on Social Security"
+    }
+  ],
+  "wage_code": [
+    {
+      "valid_from": "2025-11-21",
+      "valid_to": null,
+      "min_wage_share_of_total": 0.5,
+      "wage_components": ["basic", "da", "retaining_allowance"],
+      "fnf_settlement_working_days": 2,
+      "source": "Code on Wages, 2019 - effective 21 Nov 2025"
+    }
+  ],
+  "income_tax_new_regime": [
+    {
+      "valid_from": "2025-04-01",
+      "valid_to": null,
+      "standard_deduction": 75000,
+      "slabs": [
+        {"upto": 400000, "rate": 0.0},
+        {"upto": 800000, "rate": 0.05},
+        {"upto": 1200000, "rate": 0.10},
+        {"upto": 1600000, "rate": 0.15},
+        {"upto": 2000000, "rate": 0.20},
+        {"upto": 2400000, "rate": 0.25},
+        {"upto": null, "rate": 0.30}
+      ],
+      "rebate_income_limit": 1200000,
+      "rebate_max": 60000,
+      "cess_rate": 0.04,
+      "source": "New regime slabs from Finance Act 2025 - VERIFY under Income-tax Act 2025"
+    }
+  ]
+}
