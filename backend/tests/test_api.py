@@ -48,3 +48,23 @@ def test_errors(client):
     assert client.post("/clients", json={"id": "x1", "legal_name": "X", "state": "KA"},
                        headers=OPS).status_code == 409
     assert client.post("/clients", json={"id": "x1", "legal_name": "X"}).status_code == 422
+
+
+def test_errors_name_the_field(client):
+    r = client.post("/clients", headers=OPS, json={"id": "Bad ID", "legal_name": ""})
+    assert r.status_code == 422
+    fields = {e["field"]: e["label"] for e in r.json()["errors"]}
+    assert fields == {"id": "Client ID", "legal_name": "Legal name"}
+    assert r.json()["detail"].startswith("Client ID: ")
+
+    client.post("/clients", headers=OPS, json={"id": "acme", "legal_name": "Acme"})
+    r = client.post("/clients", headers=OPS, json={"id": "acme", "legal_name": "Acme again"})
+    assert r.status_code == 409 and r.json()["errors"][0]["label"] == "Client ID"
+
+    r = client.post("/clients/acme/employees", headers=OPS, json={
+        "code": "E1", "name": "Ravi", "joined_on": "not-a-date", "components": {"basic": -5}})
+    labels = {e["label"] for e in r.json()["errors"]}
+    assert labels == {"Joined on", "Monthly salary – Basic"}
+
+    r = client.post("/clients", json={"id": "x2", "legal_name": "X"})
+    assert r.json()["errors"][0]["label"] == "Acting as"

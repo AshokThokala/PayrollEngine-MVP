@@ -26,7 +26,11 @@ VARIANCE_THRESHOLD = Decimal("0.10")
 
 
 class ServiceError(ValueError):
-    pass
+    """A request the business rules reject. ``field`` names the input at fault, if any."""
+
+    def __init__(self, message: str, field: str | None = None):
+        super().__init__(message)
+        self.field = field
 
 
 @dataclass
@@ -58,14 +62,26 @@ class PayrollService:
 
     # --- clients and employees ----------------------------------------------
     def add_client(self, client: Client, user: str) -> Client:
+        try:
+            self.repo.get_client(client.id)
+        except LookupError:
+            pass
+        else:
+            raise ServiceError(f"A client with ID '{client.id}' already exists", field="id")
         if client.state not in self.rules.supported_states:
-            raise ServiceError(f"State {client.state} not supported yet")
+            raise ServiceError(f"{client.state} is not supported yet; only Telangana (TG) is", field="state")
         self.repo.add_client(client)
         self._audit(user, "client.create", client.id)
         return client
 
     def add_employee(self, record: EmployeeRecord, user: str) -> list[str]:
         client = self.repo.get_client(record.client_id)
+        try:
+            self.repo.get_employee(record.client_id, record.code)
+        except LookupError:
+            pass
+        else:
+            raise ServiceError(f"Employee code '{record.code}' is already used in this client", field="code")
         record.employee.state = client.state
         self.repo.save_employee(record)
         self._audit(user, "employee.create", f"{record.client_id}/{record.code}")
@@ -87,7 +103,7 @@ class PayrollService:
     def exit_employee(self, client_id: str, code: str, exit_on: date, user: str) -> None:
         record = self.repo.get_employee(client_id, code)
         if exit_on < record.joined_on:
-            raise ServiceError("Exit date is before joining date")
+            raise ServiceError(f"Must be on or after the joining date ({record.joined_on})", field="exit_on")
         record.exited_on = exit_on
         self.repo.save_employee(record)
         self._audit(user, "employee.exit", f"{client_id}/{code}", exit_on.isoformat())
@@ -100,13 +116,13 @@ class PayrollService:
         run_id = f"{client_id}:{end:%Y-%m}"
         existing = self._find_run(run_id)
         if existing and existing.status != RunStatus.DRAFT:
-            raise ServiceError(f"Run for {end:%Y-%m} is {existing.status.value}; it cannot be recalculated")
+            raise ServiceError(f"The {end:%Y-%m} run is already {existing.status.value}; it cannot be recalculated", field="period")
 
         inputs = inputs or {}
         active = [r for r in self.repo.list_employees(client.id) if r.active_in(end)]
         unknown = set(inputs) - {r.code for r in active}
         if unknown:
-            raise ServiceError(f"Inputs for unknown or inactive employees: {sorted(unknown)}")
+            raise ServiceError(f"Unknown or inactive employees: {', '.join(sorted(unknown))}", field="inputs")
 
         days = calendar.monthrange(end.year, end.month)[1]
         ytd = self._ytd(client_id, end)
@@ -163,7 +179,7 @@ class PayrollService:
                       challan_ref: str | None = None) -> Filing:
         filing = self.repo.get_filing(filing_id)
         if status != FilingStatus.PENDING and filing.kind != "form_24q" and not challan_ref:
-            raise ServiceError("A challan or acknowledgement reference is required")
+            raise ServiceError("Enter the challan or acknowledgement reference", field="challan_ref")
         filing.status, filing.challan_ref = status, challan_ref or filing.challan_ref
         self.repo.save_filing(filing)
         self._audit(user, "filing.update", filing_id, f"{status.value} {challan_ref or ''}".strip())

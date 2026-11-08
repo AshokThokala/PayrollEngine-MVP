@@ -121,3 +121,7 @@ details summary { cursor: pointer; color: var(--accent); font-size: 0.9rem; }
 .info-tip:hover .info-tip-text, .info-tip:focus .info-tip-text { visibility: visible; opacity: 1; }
 
 .card.allow-overflow { overflow: visible; }
+
+/* Field-level errors */
+.field-error { color: var(--error); font-size: 0.8rem; }
+.form input.invalid, .form select.invalid { border-color: var(--error); background: #fffafa; }

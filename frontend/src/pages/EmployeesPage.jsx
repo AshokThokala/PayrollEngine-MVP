@@ -15,11 +15,16 @@ const EMPTY = {
   esi: 'auto', pf_member: true, pt_applicable: true,
 }
 
+function FieldError({ label, error }) {
+  return error ? <span className="field-error">{label}: {error}</span> : null
+}
+
 export default function EmployeesPage({ client }) {
   const [employees, setEmployees] = useState([])
   const [form, setForm] = useState(EMPTY)
   const [message, setMessage] = useState(null)
   const [exiting, setExiting] = useState({})
+  const [fieldErrors, setFieldErrors] = useState({})
 
   const load = useCallback(async () => {
     try {
@@ -33,8 +38,12 @@ export default function EmployeesPage({ client }) {
     load()
   }, [load])
 
-  const set = (key) => (e) =>
+  const set = (key) => (e) => {
     setForm({ ...form, [key]: e.target.type === 'checkbox' ? e.target.checked : e.target.value })
+    const errorKey = COMPONENTS.some(([k]) => k === key) ? 'components' : key
+    if (fieldErrors[errorKey]) setFieldErrors({ ...fieldErrors, [errorKey]: undefined })
+  }
+  const invalid = (key) => (fieldErrors[key] ? { className: 'invalid', 'aria-invalid': true } : {})
 
   const total = COMPONENTS.reduce((sum, [k]) => sum + (Number(form[k]) || 0), 0)
   const wageShare = total ? (Number(form.basic || 0) + Number(form.da || 0)) / total : 1
@@ -45,6 +54,7 @@ export default function EmployeesPage({ client }) {
     COMPONENTS.forEach(([k]) => {
       if (Number(form[k]) > 0) components[k] = Number(form[k])
     })
+    setFieldErrors({})
     try {
       const res = await api.addEmployee(client.id, {
         code: form.code,
@@ -63,6 +73,7 @@ export default function EmployeesPage({ client }) {
       setForm(EMPTY)
       load()
     } catch (err) {
+      setFieldErrors(err.fieldErrors || {})
       setMessage({ kind: 'error', text: err.message })
     }
   }
@@ -120,10 +131,13 @@ export default function EmployeesPage({ client }) {
         <h2>Add employee</h2>
         <form onSubmit={submit} className="form">
           <div className="row">
-            <label>Code<input required value={form.code} onChange={set('code')} /></label>
-            <label>Joined on<input type="date" required value={form.joined_on} onChange={set('joined_on')} /></label>
+            <label>Code<input required value={form.code} onChange={set('code')} {...invalid('code')} />
+              <FieldError label="Employee code" error={fieldErrors.code} /></label>
+            <label>Joined on<input type="date" required value={form.joined_on} onChange={set('joined_on')} {...invalid('joined_on')} />
+              <FieldError label="Joined on" error={fieldErrors.joined_on} /></label>
           </div>
-          <label>Name<input required value={form.name} onChange={set('name')} /></label>
+          <label>Name<input required value={form.name} onChange={set('name')} {...invalid('name')} />
+            <FieldError label="Name" error={fieldErrors.name} /></label>
           <fieldset>
             <legend>Monthly salary (₹)</legend>
             {COMPONENTS.map(([k, label]) => (
@@ -131,6 +145,7 @@ export default function EmployeesPage({ client }) {
                 <input type="number" min="0" step="0.01" value={form[k]} onChange={set(k)} />
               </label>
             ))}
+            <FieldError label="Monthly salary" error={fieldErrors.components} />
             <div className="total">
               Total {money(total)}
               {total > 0 && wageShare < 0.5 && (
