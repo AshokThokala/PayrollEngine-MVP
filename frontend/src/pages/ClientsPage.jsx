@@ -1,5 +1,31 @@
-import { useState } from 'react'
+import { cloneElement, useState } from 'react'
 import { api } from '../api.js'
+import InfoTip from '../components/InfoTip.jsx'
+
+// Help text for each field on the Add client form.
+const TIPS = {
+  id: 'Short unique code for this client: 2–40 lowercase letters, digits or hyphens (e.g. acme-textiles). Used in run and filing IDs and cannot be changed later.',
+  legal_name: 'Registered name of the business exactly as on its PAN or registration certificate. Shown on payslips and statutory reports.',
+  state: 'State where the employees work. It decides which Professional Tax and Labour Welfare Fund rules apply. Only Telangana is supported for now.',
+  pan: "Business's 10-character Permanent Account Number: 5 letters, 4 digits, 1 letter (e.g. AAACA1234A). Optional for now.",
+  tan: '10-character Tax Deduction Account Number used to deposit TDS and file Form 24Q: 4 letters, 5 digits, 1 letter (e.g. HYDA12345B).',
+  pf_code: 'EPFO establishment code from the employer\'s PF registration (e.g. TSHYD0012345000). Needed for the monthly ECR and PF challan.',
+  esi_code: '17-digit ESIC employer code. Leave blank if the business is not registered under ESI.',
+  pt_registration: 'Professional Tax registration number of the business, issued by the Telangana Commercial Taxes Department.',
+}
+
+function Field({ name, label, children }) {
+  const tipId = `tip-${name}`
+  return (
+    <label>
+      <span className="label-text">
+        {label}
+        <InfoTip id={tipId} text={TIPS[name]} />
+      </span>
+      {cloneElement(children, { title: TIPS[name], 'aria-describedby': tipId })}
+    </label>
+  )
+}
 
 const EMPTY = { id: '', legal_name: '', state: 'TG', pan: '', tan: '', pf_code: '', esi_code: '', pt_registration: '' }
 
@@ -53,27 +79,31 @@ export default function ClientsPage({ clients, onCreated, onOpen }) {
         )}
       </section>
 
-      <section className="card">
+      <section className="card allow-overflow">
         <h2>Add client</h2>
         <form onSubmit={submit} className="form">
-          <label>Client ID (lowercase, e.g. acme)
+          <Field name="id" label="Client ID">
             <input required pattern="[a-z0-9-]{2,40}" value={form.id} onChange={set('id')} />
-          </label>
-          <label>Legal name<input required value={form.legal_name} onChange={set('legal_name')} /></label>
-          <label>State
+          </Field>
+          <Field name="legal_name" label="Legal name">
+            <input required value={form.legal_name} onChange={set('legal_name')} />
+          </Field>
+          <Field name="state" label="State">
             <select value={form.state} onChange={set('state')}>
               <option value="TG">Telangana</option>
             </select>
-          </label>
+          </Field>
           <div className="row">
-            <label>PAN<input value={form.pan} onChange={set('pan')} /></label>
-            <label>TAN<input value={form.tan} onChange={set('tan')} /></label>
+            <Field name="pan" label="PAN"><input value={form.pan} onChange={set('pan')} /></Field>
+            <Field name="tan" label="TAN"><input value={form.tan} onChange={set('tan')} /></Field>
           </div>
           <div className="row">
-            <label>PF code<input value={form.pf_code} onChange={set('pf_code')} /></label>
-            <label>ESI code<input value={form.esi_code} onChange={set('esi_code')} /></label>
+            <Field name="pf_code" label="PF code"><input value={form.pf_code} onChange={set('pf_code')} /></Field>
+            <Field name="esi_code" label="ESI code"><input value={form.esi_code} onChange={set('esi_code')} /></Field>
           </div>
-          <label>PT registration<input value={form.pt_registration} onChange={set('pt_registration')} /></label>
+          <Field name="pt_registration" label="PT registration">
+            <input value={form.pt_registration} onChange={set('pt_registration')} />
+          </Field>
           <button className="primary" disabled={busy}>{busy ? 'Saving…' : 'Create client'}</button>
           {message && <div className={`banner ${message.kind}`}>{message.text}</div>}
         </form>

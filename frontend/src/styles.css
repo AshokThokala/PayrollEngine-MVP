@@ -97,3 +97,27 @@ main > .banner { margin: 0 0 16px; }
 .muted { color: var(--muted); }
 .small { font-size: 0.8rem; }
 details summary { cursor: pointer; color: var(--accent); font-size: 0.9rem; }
+
+/* Field help tooltips */
+.label-text { display: inline-flex; align-items: center; gap: 6px; }
+.info-tip {
+  position: relative; display: inline-flex; align-items: center; justify-content: center;
+  width: 16px; height: 16px; border-radius: 50%; border: 1px solid var(--muted);
+  font-size: 11px; font-weight: 700; font-style: italic; line-height: 1;
+  color: var(--muted); cursor: help; user-select: none;
+}
+.info-tip:hover, .info-tip:focus { color: var(--accent); border-color: var(--accent); outline: none; }
+.info-tip-text {
+  visibility: hidden; opacity: 0; transition: opacity 0.12s;
+  position: absolute; z-index: 10; left: -8px; bottom: calc(100% + 8px);
+  width: min(260px, 70vw); padding: 8px 10px; border-radius: 6px;
+  background: var(--ink); color: #fff; font-size: 0.8rem; font-style: normal; font-weight: 400;
+  line-height: 1.4; text-align: left; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15); pointer-events: none;
+}
+.info-tip-text::after {
+  content: ''; position: absolute; top: 100%; left: 10px;
+  border: 6px solid transparent; border-top-color: var(--ink);
+}
+.info-tip:hover .info-tip-text, .info-tip:focus .info-tip-text { visibility: visible; opacity: 1; }
+
+.card.allow-overflow { overflow: visible; }
