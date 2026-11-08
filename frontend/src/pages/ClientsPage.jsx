@@ -79,7 +79,7 @@ export default function ClientsPage({ clients, onCreated, onOpen }) {
         )}
       </section>
 
-      <section className="card">
+      <section className="card allow-overflow">
         <h2>Add client</h2>
         <form onSubmit={submit} className="form">
           <Field name="id" label="Client ID">
