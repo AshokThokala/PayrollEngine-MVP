@@ -28,6 +28,8 @@ def test_full_month_flow(client):
 
     run = client.post("/clients/acme/runs", headers=OPS, json={"period": "2026-10-01"}).json()
     assert run["status"] == "draft" and float(run["total_net"]) == 23000
+    assert [r["id"] for r in client.get("/clients/acme/runs").json()] == ["acme:2026-10"]
+    assert client.get("/runs/acme%3A2026-10").json()["id"] == "acme:2026-10"
 
     assert client.post(f"/runs/{run['id']}/approve", headers=OPS).status_code == 409
     assert client.post(f"/runs/{run['id']}/approve", headers=REVIEWER).status_code == 200

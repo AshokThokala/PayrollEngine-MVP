@@ -127,6 +127,12 @@ def create_run(client_id: str, body: s.RunIn, user: str = Depends(current_user),
     return _run_out(svc.create_draft(client_id, body.period, user, inputs))
 
 
+@app.get("/clients/{client_id}/runs", response_model=list[s.RunOut])
+def list_runs(client_id: str, svc: PayrollService = Depends(get_service)):
+    svc.repo.get_client(client_id)
+    return [_run_out(r) for r in reversed(svc.repo.list_runs(client_id))]
+
+
 @app.get("/runs/{run_id}", response_model=s.RunOut)
 def get_run(run_id: str, svc: PayrollService = Depends(get_service)):
     return _run_out(svc.repo.get_run(run_id))
