@@ -121,5 +121,3 @@ details summary { cursor: pointer; color: var(--accent); font-size: 0.9rem; }
 .info-tip:hover .info-tip-text, .info-tip:focus .info-tip-text { visibility: visible; opacity: 1; }
 
 .card.allow-overflow { overflow: visible; }
-
-.form input::placeholder { color: #a0a6b3; }
