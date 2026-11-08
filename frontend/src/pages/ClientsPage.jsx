@@ -14,15 +14,22 @@ const TIPS = {
   pt_registration: 'Professional Tax registration number of the business, issued by the Telangana Commercial Taxes Department.',
 }
 
-function Field({ name, label, children }) {
+function Field({ name, label, error, children }) {
   const tipId = `tip-${name}`
+  const errorId = `err-${name}`
   return (
     <label>
       <span className="label-text">
         {label}
         <InfoTip id={tipId} text={TIPS[name]} />
       </span>
-      {cloneElement(children, { title: TIPS[name], 'aria-describedby': tipId })}
+      {cloneElement(children, {
+        title: TIPS[name],
+        'aria-describedby': error ? `${errorId} ${tipId}` : tipId,
+        'aria-invalid': error ? true : undefined,
+        className: error ? 'invalid' : undefined,
+      })}
+      {error && <span id={errorId} className="field-error">{label}: {error}</span>}
     </label>
   )
 }
@@ -33,12 +40,17 @@ export default function ClientsPage({ clients, onCreated, onOpen }) {
   const [form, setForm] = useState(EMPTY)
   const [message, setMessage] = useState(null)
   const [busy, setBusy] = useState(false)
+  const [fieldErrors, setFieldErrors] = useState({})
 
-  const set = (key) => (e) => setForm({ ...form, [key]: e.target.value })
+  const set = (key) => (e) => {
+    setForm({ ...form, [key]: e.target.value })
+    if (fieldErrors[key]) setFieldErrors({ ...fieldErrors, [key]: undefined })
+  }
 
   const submit = async (e) => {
     e.preventDefault()
     setBusy(true)
+    setFieldErrors({})
     try {
       await api.createClient(form)
       setMessage({ kind: 'ok', text: `Client ${form.legal_name} created.` })
@@ -46,6 +58,7 @@ export default function ClientsPage({ clients, onCreated, onOpen }) {
       setForm(EMPTY)
       await onCreated(id)
     } catch (err) {
+      setFieldErrors(err.fieldErrors || {})
       setMessage({ kind: 'error', text: err.message })
     } finally {
       setBusy(false)
@@ -82,26 +95,26 @@ export default function ClientsPage({ clients, onCreated, onOpen }) {
       <section className="card allow-overflow">
         <h2>Add client</h2>
         <form onSubmit={submit} className="form">
-          <Field name="id" label="Client ID">
+          <Field name="id" error={fieldErrors.id} label="Client ID">
             <input required pattern="[a-z0-9-]{2,40}" value={form.id} onChange={set('id')} />
           </Field>
-          <Field name="legal_name" label="Legal name">
+          <Field name="legal_name" error={fieldErrors.legal_name} label="Legal name">
             <input required value={form.legal_name} onChange={set('legal_name')} />
           </Field>
-          <Field name="state" label="State">
+          <Field name="state" error={fieldErrors.state} label="State">
             <select value={form.state} onChange={set('state')}>
               <option value="TG">Telangana</option>
             </select>
           </Field>
           <div className="row">
-            <Field name="pan" label="PAN"><input value={form.pan} onChange={set('pan')} /></Field>
-            <Field name="tan" label="TAN"><input value={form.tan} onChange={set('tan')} /></Field>
+            <Field name="pan" error={fieldErrors.pan} label="PAN"><input value={form.pan} onChange={set('pan')} /></Field>
+            <Field name="tan" error={fieldErrors.tan} label="TAN"><input value={form.tan} onChange={set('tan')} /></Field>
           </div>
           <div className="row">
-            <Field name="pf_code" label="PF code"><input value={form.pf_code} onChange={set('pf_code')} /></Field>
-            <Field name="esi_code" label="ESI code"><input value={form.esi_code} onChange={set('esi_code')} /></Field>
+            <Field name="pf_code" error={fieldErrors.pf_code} label="PF code"><input value={form.pf_code} onChange={set('pf_code')} /></Field>
+            <Field name="esi_code" error={fieldErrors.esi_code} label="ESI code"><input value={form.esi_code} onChange={set('esi_code')} /></Field>
           </div>
-          <Field name="pt_registration" label="PT registration">
+          <Field name="pt_registration" error={fieldErrors.pt_registration} label="PT registration">
             <input value={form.pt_registration} onChange={set('pt_registration')} />
           </Field>
           <button className="primary" disabled={busy}>{busy ? 'Saving…' : 'Create client'}</button>

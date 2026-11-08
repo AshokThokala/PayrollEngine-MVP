@@ -4,12 +4,17 @@ from __future__ import annotations
 from datetime import date
 from decimal import Decimal
 
+from typing import Annotated
+
 from pydantic import BaseModel, Field
+
+Amount = Annotated[Decimal, Field(ge=0)]
+RequiredText = Annotated[str, Field(min_length=1)]
 
 
 class ClientIn(BaseModel):
     id: str = Field(pattern=r"^[a-z0-9-]{2,40}$")
-    legal_name: str
+    legal_name: RequiredText
     state: str = "TG"
     pan: str = ""
     tan: str = ""
@@ -19,10 +24,10 @@ class ClientIn(BaseModel):
 
 
 class EmployeeIn(BaseModel):
-    code: str
-    name: str
+    code: RequiredText
+    name: RequiredText
     joined_on: date
-    components: dict[str, Decimal]
+    components: dict[str, Amount] = Field(min_length=1)
     pf_member: bool = True
     eps_member: bool = True
     pf_on_full_wages: bool = False
@@ -50,10 +55,10 @@ class ExitIn(BaseModel):
 
 
 class MonthInputIn(BaseModel):
-    paid_days: Decimal | None = None
-    overtime: Decimal = Decimal(0)
-    other_earnings: dict[str, Decimal] = {}
-    other_deductions: dict[str, Decimal] = {}
+    paid_days: Amount | None = None
+    overtime: Amount = Decimal(0)
+    other_earnings: dict[str, Amount] = {}
+    other_deductions: dict[str, Amount] = {}
 
 
 class RunIn(BaseModel):

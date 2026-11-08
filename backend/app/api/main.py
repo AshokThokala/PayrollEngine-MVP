@@ -10,7 +10,8 @@ from __future__ import annotations
 from datetime import date
 from functools import lru_cache
 
-from fastapi import Depends, FastAPI, Header, HTTPException, Request
+from fastapi import Depends, FastAPI, Header, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
 from ..domain import Client, EmployeeRecord, FilingStatus, PayrollRun
@@ -19,6 +20,7 @@ from ..db import make_repository
 from ..repository import NotFound
 from ..services import MonthInput, PayrollService, ServiceError
 from ..services.compliance import overdue
+from . import errors
 from . import schemas as s
 
 app = FastAPI(title="Payroll + Compliance MVP", version="0.2.0")
@@ -36,12 +38,18 @@ def current_user(x_user: str = Header(..., description="Placeholder auth")) -> s
 
 @app.exception_handler(NotFound)
 async def _not_found(_: Request, exc: NotFound):
-    return JSONResponse(status_code=404, content={"detail": str(exc)})
+    return JSONResponse(status_code=404, content=errors.from_service(str(exc), None))
 
 
 @app.exception_handler(ServiceError)
 async def _rejected(_: Request, exc: ServiceError):
-    return JSONResponse(status_code=409, content={"detail": str(exc)})
+    return JSONResponse(status_code=409, content=errors.from_service(str(exc), exc.field))
+
+
+@app.exception_handler(RequestValidationError)
+async def _invalid(_: Request, exc: RequestValidationError):
+    # 422 with every problem tied to its field, e.g. "PAN: This field is required".
+    return JSONResponse(status_code=422, content=errors.from_validation(exc.errors()))
 
 
 def _employee_out(r: EmployeeRecord) -> s.EmployeeOut:
@@ -87,8 +95,10 @@ def create_client(body: s.ClientIn, user: str = Depends(current_user),
                   svc: PayrollService = Depends(get_service)):
     try:
         svc.add_client(Client(**body.model_dump()), user)
-    except ValueError as exc:
-        raise HTTPException(409, str(exc)) from exc
+    except ServiceError:
+        raise
+    except ValueError as exc:  # storage-level duplicate (e.g. two requests at once)
+        raise ServiceError(str(exc), field="id") from exc
     return body
 
 
@@ -165,5 +175,6 @@ def update_filing(filing_id: str, body: s.FilingUpdate, user: str = Depends(curr
     try:
         status = FilingStatus(body.status)
     except ValueError as exc:
-        raise HTTPException(422, f"Unknown status {body.status!r}") from exc
+        return JSONResponse(status_code=422, content=errors.from_service(
+            f"Use one of: {', '.join(x.value for x in FilingStatus)}", "status"))
     return _filing_out(svc.update_filing(filing_id, status, user, body.challan_ref))

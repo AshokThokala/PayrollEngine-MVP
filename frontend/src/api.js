@@ -25,14 +25,20 @@ async function request(method, path, body) {
   })
   if (!res.ok) {
     let message = `${res.status} ${res.statusText}`
+    const fieldErrors = {}
     try {
       const data = await res.json()
       if (typeof data.detail === 'string') message = data.detail
-      else if (Array.isArray(data.detail)) message = data.detail.map((d) => d.msg).join('; ')
+      // The API names the field for each problem: { field, label, message }.
+      ;(data.errors || []).forEach((e) => {
+        if (e.field) fieldErrors[e.field.split('.')[0]] = e.message
+      })
     } catch {
       // keep the status text
     }
-    throw new Error(message)
+    const error = new Error(message)
+    error.fieldErrors = fieldErrors
+    throw error
   }
   return res.status === 204 ? null : res.json()
 }

@@ -157,3 +157,17 @@ def test_filing_needs_challan_and_is_audited(repo):
     svc.update_filing(pf.id, FilingStatus.PAID, user="ops1", challan_ref="TRRN123")
     actions = [e.action for e in svc.repo.audit_log()]
     assert actions[-4:] == ["run.draft", "run.approve", "run.lock", "filing.update"]
+
+
+def test_errors_name_the_field(repo):
+    svc = staffed(repo)
+    with pytest.raises(ServiceError) as dup_client:
+        svc.add_client(Client(id="acme", legal_name="Again", state="TG"), user="ops1")
+    assert dup_client.value.field == "id"
+    with pytest.raises(ServiceError) as dup_emp:
+        hire(svc, "E1", {"basic": 1000})
+    assert dup_emp.value.field == "code"
+    assert repo.get_employee("acme", "E1").structure.components["basic"] == D(15000)  # not overwritten
+    with pytest.raises(ServiceError) as early_exit:
+        svc.exit_employee("acme", "E1", date(2026, 3, 1), "ops1")
+    assert early_exit.value.field == "exit_on"
