@@ -2,15 +2,16 @@ import { cloneElement, useState } from 'react'
 import { api } from '../api.js'
 import InfoTip from '../components/InfoTip.jsx'
 
-// Example values shown inside empty fields (illustrative only).
+// Example value shown after each field name, e.g. "PAN (AAACA1234A)". Illustrative only.
 const EXAMPLES = {
-  id: 'e.g. acme-textiles',
-  legal_name: 'e.g. Acme Textiles Private Limited',
-  pan: 'e.g. AAACA1234A',
-  tan: 'e.g. HYDA12345B',
-  pf_code: 'e.g. TSHYD0012345000',
-  esi_code: 'e.g. 52000123450001001',
-  pt_registration: 'e.g. 36123456789',
+  id: 'acme-textiles',
+  legal_name: 'Acme Textiles Private Limited',
+  state: 'Telangana',
+  pan: 'AAACA1234A',
+  tan: 'HYDA12345B',
+  pf_code: 'TSHYD0012345000',
+  esi_code: '52000123450001001',
+  pt_registration: '36123456789',
 }
 
 // Help text for each field on the Add client form.
@@ -30,14 +31,13 @@ function Field({ name, label, children }) {
   return (
     <label>
       <span className="label-text">
-        {label}
+        <span>
+          {label}
+          {EXAMPLES[name] && <span className="label-example"> ({EXAMPLES[name]})</span>}
+        </span>
         <InfoTip id={tipId} text={TIPS[name]} />
       </span>
-      {cloneElement(children, {
-        title: TIPS[name],
-        'aria-describedby': tipId,
-        ...(EXAMPLES[name] ? { placeholder: EXAMPLES[name] } : {}),
-      })}
+      {cloneElement(children, { title: TIPS[name], 'aria-describedby': tipId })}
     </label>
   )
 }
