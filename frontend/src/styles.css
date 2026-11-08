@@ -122,4 +122,4 @@ details summary { cursor: pointer; color: var(--accent); font-size: 0.9rem; }
 
 .card.allow-overflow { overflow: visible; }
 
-.form input::placeholder { color: #a0a6b3; }
+.label-example { color: #8a91a1; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 0.8rem; }
