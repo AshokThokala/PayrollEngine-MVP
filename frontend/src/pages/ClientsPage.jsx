@@ -2,6 +2,17 @@ import { cloneElement, useState } from 'react'
 import { api } from '../api.js'
 import InfoTip from '../components/InfoTip.jsx'
 
+// Example values shown inside empty fields (illustrative only).
+const EXAMPLES = {
+  id: 'e.g. acme-textiles',
+  legal_name: 'e.g. Acme Textiles Private Limited',
+  pan: 'e.g. AAACA1234A',
+  tan: 'e.g. HYDA12345B',
+  pf_code: 'e.g. TSHYD0012345000',
+  esi_code: 'e.g. 52000123450001001',
+  pt_registration: 'e.g. 36123456789',
+}
+
 // Help text for each field on the Add client form.
 const TIPS = {
   id: 'Short unique code for this client: 2–40 lowercase letters, digits or hyphens (e.g. acme-textiles). Used in run and filing IDs and cannot be changed later.',
@@ -22,7 +33,11 @@ function Field({ name, label, children }) {
         {label}
         <InfoTip id={tipId} text={TIPS[name]} />
       </span>
-      {cloneElement(children, { title: TIPS[name], 'aria-describedby': tipId })}
+      {cloneElement(children, {
+        title: TIPS[name],
+        'aria-describedby': tipId,
+        ...(EXAMPLES[name] ? { placeholder: EXAMPLES[name] } : {}),
+      })}
     </label>
   )
 }
