@@ -110,7 +110,7 @@ export default function ClientsPage({ clients, onCreated, onOpen, onUpdated }) {
           <div className="table-wrap">
             <table className="clickable">
               <thead>
-                <tr><th>Legal name</th><th>ID</th><th>State</th><th>PF code</th></tr>
+                <tr><th>Legal name</th><th>ID</th><th>State</th></tr>
               </thead>
               <tbody>
                 {clients.map((c) => (
@@ -119,14 +119,12 @@ export default function ClientsPage({ clients, onCreated, onOpen, onUpdated }) {
                     <td><strong>{c.legal_name}</strong></td>
                     <td>{c.id}</td>
                     <td>{c.state}</td>
-                    <td>{c.pf_code || '—'}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
         )}
-        <p className="muted small">Click a client to view or edit its details.</p>
       </section>
 
       {mode === 'none' ? (

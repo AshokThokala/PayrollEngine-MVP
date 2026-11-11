@@ -433,3 +433,10 @@ h3.sub { margin: 6px 0 0; font-size: 0.95rem; }
 .gs-empty { padding: 10px; margin: 0; }
 .gs-menu .banner { margin: 4px; }
 @media (max-width: 720px) { .global-search { order: 3; max-width: none; flex-basis: 100%; } .gs-kbd { display: none; } }
+
+/* --- concise lists ------------------------------------------------------------------------- */
+table.compact-list td { padding-top: 9px; padding-bottom: 9px; }
+table.compact-list .caret { display: inline-block; width: 12px; color: var(--muted); }
+table.clickable tbody tr.detail-row { cursor: default; }
+table.clickable tbody tr.detail-row td { background: #fafcfb; padding: 4px 12px 12px; }
+.detail-row .rule-version { margin-top: 10px; }

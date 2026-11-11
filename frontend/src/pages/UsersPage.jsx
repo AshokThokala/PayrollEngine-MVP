@@ -69,14 +69,13 @@ export default function UsersPage({ user, clients }) {
         {message && <div className={`banner ${message.kind}`}>{message.text}</div>}
         <div className="table-wrap">
           <table>
-            <thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Access to</th><th>Status</th><th></th></tr></thead>
+            <thead><tr><th>User</th><th>Role</th><th>Client</th><th>Status</th><th></th></tr></thead>
             <tbody>
               {shown.map((u) => (
                 <tr key={u.id}>
-                  <td>{u.name}</td>
-                  <td>{u.email}</td>
+                  <td title={u.email}><strong>{u.name}</strong> <span className="muted small">{u.email}</span></td>
                   <td>{u.is_platform_admin ? 'Platform admin' : ROLE[u.role]}</td>
-                  <td>{u.role === 'employee' ? `${clientName(u.client_id)} · ${u.employee_code}` : clientName(u.client_id)}</td>
+                  <td>{clientName(u.client_id)}</td>
                   <td><span className={`tag ${u.status === 'active' ? 'locked' : u.status === 'pending' ? 'approved' : 'error'}`}>{u.status}</span></td>
                   <td>
                     {u.id !== user.id && (u.client_id || user.is_platform_admin) && (

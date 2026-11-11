@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { Fragment, useCallback, useEffect, useMemo, useState } from 'react'
 import { api, today } from '../api.js'
 import InfoTip from '../components/InfoTip.jsx'
 
@@ -78,6 +78,7 @@ export default function RulesPage({ initialCategory }) {
   const [message, setMessage] = useState(null)
   const [busy, setBusy] = useState(false)
   const [editing, setEditing] = useState(null) // a rule version being corrected
+  const [open, setOpen] = useState(null) // rule group shown with its versions
 
   const load = useCallback(async () => {
     try {
@@ -198,31 +199,50 @@ export default function RulesPage({ initialCategory }) {
             {scopes.map((s) => <option key={s} value={s}>{s === 'central' ? 'Central' : stateName(s)}</option>)}
           </select>
         </div>
-        <p className="muted small">Each rule has dated versions. Payroll uses the version in force on the last day of the pay month; locked runs keep the values they were calculated with.</p>
-        {grouped.map(({ key, versions }) => {
-          const cat = categories.find((c) => c.category === versions[0].category)
-          return (
-            <div key={key} className="rule-group">
-              <h3>{versions[0].category_label} <span className="tag">{versions[0].scope === 'central' ? 'Central' : stateName(versions[0].scope)}</span></h3>
-              {versions.map((r) => (
-                <div key={r.id} className={r.valid_to ? 'rule-version dim' : 'rule-version'}>
-                  <div className="rule-dates">
-                    {r.valid_from} → {r.valid_to || <span className="tag locked">in force</span>}
-                  </div>
-                  <ul className="rule-values">
-                    {(cat?.fields || []).map((f) => (
-                      <li key={f.key}><span className="muted">{f.label}:</span> {summary(f.type, r.params[f.key])}</li>
-                    ))}
-                  </ul>
-                  <div className="muted small">
-                    Source: {r.source || '—'} · added by {r.created_by}
-                    {' · '}<button type="button" className="link" onClick={() => startEdit(r)}>Edit</button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )
-        })}
+        <div className="table-wrap">
+          <table className="clickable compact-list">
+            <thead><tr><th>Rule</th><th>Scope</th><th>In force since</th><th className="num">Versions</th></tr></thead>
+            <tbody>
+              {grouped.map(({ key, versions }) => {
+                const cat = categories.find((c) => c.category === versions[0].category)
+                const current = versions.find((v) => !v.valid_to) || versions[0]
+                const isOpen = open === key
+                return (
+                  <Fragment key={key}>
+                    <tr className={isOpen ? 'selected' : undefined} tabIndex={0}
+                        onClick={() => setOpen(isOpen ? null : key)}
+                        onKeyDown={(e) => e.key === 'Enter' && setOpen(isOpen ? null : key)}>
+                      <td><span className="caret" aria-hidden="true">{isOpen ? '▾' : '▸'}</span> {versions[0].category_label}</td>
+                      <td>{versions[0].scope === 'central' ? 'Central' : stateName(versions[0].scope)}</td>
+                      <td>{current.valid_from}</td>
+                      <td className="num">{versions.length}</td>
+                    </tr>
+                    {isOpen && (
+                      <tr className="detail-row">
+                        <td colSpan={4}>
+                          {versions.map((r) => (
+                            <div key={r.id} className={r.valid_to ? 'rule-version dim' : 'rule-version'}>
+                              <div className="rule-dates">
+                                {r.valid_from} → {r.valid_to || <span className="tag locked">in force</span>}
+                                {' '}<button type="button" className="link" onClick={() => startEdit(r)}>Edit</button>
+                              </div>
+                              <ul className="rule-values">
+                                {(cat?.fields || []).map((f) => (
+                                  <li key={f.key}><span className="muted">{f.label}:</span> {summary(f.type, r.params[f.key])}</li>
+                                ))}
+                              </ul>
+                              <div className="muted small">Source: {r.source || '—'} · added by {r.created_by}</div>
+                            </div>
+                          ))}
+                        </td>
+                      </tr>
+                    )}
+                  </Fragment>
+                )
+              })}
+            </tbody>
+          </table>
+        </div>
       </section>
 
       <section className="card allow-overflow">

@@ -39,11 +39,10 @@ export default function ClientOnboardingPage({ client, platform, tabs, onGo, onP
           <Progress percent={check.percent} label={`${check.client_name} onboarding progress`} />
           <ol className="checklist">
             {check.steps.map((s, i) => (
-              <li key={s.key} className={s.done ? 'done' : ''}>
+              <li key={s.key} className={s.done ? 'done' : ''} title={s.description}>
                 <span className="check-mark" aria-hidden="true">{s.done ? '✓' : i + 1}</span>
                 <div className="check-body">
                   <strong>{s.title}</strong>
-                  <span className="muted small">{s.description}</span>
                   <span className={s.done ? 'small ok-text' : 'small warn-text'}>{s.detail}</span>
                 </div>
                 {!s.done && tabs.includes(s.action) && (
@@ -58,7 +57,6 @@ export default function ClientOnboardingPage({ client, platform, tabs, onGo, onP
       {platform && all.length > 0 && (
         <section className="card">
           <h2>All clients</h2>
-          <p className="muted small">Least complete first. Click a client to open its checklist.</p>
           <div className="table-wrap">
             <table className="clickable">
               <thead>
