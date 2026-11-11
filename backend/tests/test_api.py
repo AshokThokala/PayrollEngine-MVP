@@ -67,7 +67,7 @@ def test_errors(client, ops, reviewer):
     assert client.get("/runs/nope", headers=ops).status_code == 404
     assert client.post("/clients", json={"id": "x1", "legal_name": "X", "state": "KA"},
                        headers=ops).status_code == 409
-    assert client.post("/clients", json={"id": "x1", "legal_name": "X"}, headers=ops).status_code == 422
+    assert client.post("/clients", json={"id": "x1", "legal_name": "X"}).status_code == 401  # not logged in
 
 
 def test_errors_name_the_field(client, ops, reviewer):
