@@ -273,3 +273,12 @@ def test_employee_invite_and_onboarding_api(client, ops):
     assert client.get("/clients/acme/employees/E1/profile", headers=ops).json()["pan"] == "ABCDE1234F"
     assert client.post("/clients/acme/employees/E1/profile/verify", headers=ops).json()["status"] == "verified"
     assert client.get("/me/onboarding", headers=ravi).json()["status"] == "verified"
+
+def test_tax_rules_api(client, ops):
+    o = client.get("/tax/rules?on=2026-11-10", headers=ops).json()
+    assert o["tax_year"] == "2026-27" and o["regimes"]["new"]["params"]["rebate_max"] == 60000
+    r = client.post("/tax/calculate", headers=ops, json={"annual_gross": "1500000"})
+    assert r.status_code == 200 and r.json()["better"] in ("new", "old")
+    r = client.post("/tax/calculate", headers=ops, json={"annual_gross": "x"})
+    assert r.status_code == 422 and r.json()["errors"][0]["label"] == "Yearly gross salary"
+    assert client.get("/tax/rules").status_code == 401

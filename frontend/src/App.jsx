@@ -12,6 +12,7 @@ import InviteRegistration from './pages/InviteRegistration.jsx'
 import ReportsPage from './pages/ReportsPage.jsx'
 import FilingsPage from './pages/FilingsPage.jsx'
 import RulesPage from './pages/RulesPage.jsx'
+import TaxRulesPage from './pages/TaxRulesPage.jsx'
 import RunsPage from './pages/RunsPage.jsx'
 import UsersPage from './pages/UsersPage.jsx'
 
@@ -83,6 +84,7 @@ const NAV = [
   { id: 'users', label: 'Users and access', icon: '⚿' },
   { id: 'billing', label: 'Billing', icon: '◫', needsClient: true },
   { id: 'rules', label: 'Compliance rules', icon: '§', platformOnly: true },
+  { id: 'tax', label: 'Tax rules', icon: '%' },
 ]
 
 function AdminShell({ user, onLogout, onViewAs }) {
@@ -91,6 +93,7 @@ function AdminShell({ user, onLogout, onViewAs }) {
   const [clientId, setClientId] = useState(user.client_id || '')
   const [tab, setTab] = useState(platform ? 'clients' : 'employees')
   const [error, setError] = useState('')
+  const [ruleCategory, setRuleCategory] = useState(null) // Tax rules → open Compliance rules on a category
 
   const loadClients = useCallback(async () => {
     try {
@@ -187,7 +190,16 @@ function AdminShell({ user, onLogout, onViewAs }) {
             <BillingPage client={client} platform={platform} onPickClient={setClientId} />
           )}
           {tab === 'users' && <UsersPage user={user} clients={clients} />}
-          {tab === 'rules' && platform && <RulesPage />}
+          {tab === 'rules' && platform && <RulesPage key={ruleCategory || 'all'} initialCategory={ruleCategory} />}
+          {tab === 'tax' && (
+            <TaxRulesPage
+              canEdit={platform}
+              onEdit={(category) => {
+                setRuleCategory(category)
+                setTab('rules')
+              }}
+            />
+          )}
         </main>
       </div>
     </div>

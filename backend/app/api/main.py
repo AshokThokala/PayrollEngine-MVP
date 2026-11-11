@@ -29,6 +29,7 @@ from ..services.reports import CATALOG, UnknownReport, run_report
 from ..services.billing import PLANS, BillingService
 from ..services.onboarding import all_clients, client_checklist
 from ..services.employee_onboarding import EmployeeOnboardingService
+from ..services import tax as tax_rules
 from . import errors
 from . import schemas as s
 
@@ -625,3 +626,20 @@ def save_my_onboarding(body: s.ProfileIn, user: User = Depends(employee_user),
     data = body.model_dump()
     submit = data.pop("submit")
     return eo.save_my_profile(user, data, submit=submit)
+
+# --- income tax rules page -------------------------------------------------------------------
+
+@app.get("/tax/rules")
+def tax_rules_overview(on: date | None = None, actor: User = Depends(admin_user),
+                       svc: PayrollService = Depends(get_service)):
+    """Both regimes' slabs, deductions and limits in force on a date, TDS due dates and version history."""
+    return tax_rules.overview(svc, on or svc.clock().date())
+
+
+@app.post("/tax/calculate")
+def tax_calculate(body: s.TaxCalcIn, actor: User = Depends(current_user),
+                  svc: PayrollService = Depends(get_service)):
+    """Tax for a yearly salary under both regimes, step by step."""
+    data = body.model_dump()
+    on = data.pop("on") or svc.clock().date()
+    return tax_rules.calculate(svc, on, data)

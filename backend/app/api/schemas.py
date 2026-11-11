@@ -281,3 +281,20 @@ class ProfileIn(BaseModel):
     pan: str = ""
     account_number: str = ""
     submit: bool = False
+
+class TaxCalcIn(BaseModel):
+    on: date | None = None
+    annual_gross: str = ""
+    basic_da: str = ""
+    hra_received: str = ""
+    professional_tax: str = ""
+    employee_pf: str = ""
+    rent_paid: str = ""
+    sec_80c: str = ""
+    sec_80ccd_1b: str = ""
+    sec_80d_self: str = ""
+    sec_80d_parents: str = ""
+    home_loan_interest: str = ""
+    age_group: str = "below_60"
+    metro_city: bool = False
+    parents_senior: bool = False
