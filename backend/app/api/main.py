@@ -650,5 +650,5 @@ def tax_calculate(body: s.TaxCalcIn, actor: User = Depends(current_user),
 
 @app.get("/search")
 def search(q: str = "", actor: User = Depends(admin_user), svc: PayrollService = Depends(get_service)):
-    """Clients (by name, ID or PAN) and employees (by name or code) the user can see."""
+    """Employees (by name or code) the user can see."""
     return run_search(svc, actor, q)

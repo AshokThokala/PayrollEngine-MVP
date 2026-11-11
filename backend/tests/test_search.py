@@ -33,15 +33,15 @@ def test_platform_admin_sees_all(svc):
     r = search(svc, PLATFORM, "ravi")
     assert [(e["client_id"], e["code"]) for e in r["employees"]] == [("acme", "E1"), ("bharat", "B1")]
     assert r["employees"][1]["client_name"] == "Bharat Foods"
-    assert [c["id"] for c in search(svc, PLATFORM, "foods")["clients"]] == ["bharat"]
-    assert [c["id"] for c in search(svc, PLATFORM, "aaaca")["clients"]] == ["acme"]  # by PAN
+    assert "clients" not in search(svc, PLATFORM, "foods")  # employees only
+    assert search(svc, PLATFORM, "foods")["employees"] == []
     assert [e["code"] for e in search(svc, PLATFORM, "e2")["employees"]] == ["E2"]  # by code
 
 
 def test_client_admin_only_own_client(svc):
     r = search(svc, ACME, "ravi")
-    assert [e["code"] for e in r["employees"]] == ["E1"] and r["clients"] == []
-    assert search(svc, ACME, "bharat")["clients"] == []
+    assert [e["code"] for e in r["employees"]] == ["E1"]
+    assert search(svc, ACME, "b1")["employees"] == []
 
 
 def test_wildcards_are_literal_and_short_queries(svc):

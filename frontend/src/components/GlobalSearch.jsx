@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import { api } from '../api.js'
 
-// Search box on the main screen: clients and employees, opened with "/" or Ctrl/⌘+K.
-export default function GlobalSearch({ platform, onPickClient, onPickEmployee }) {
+// Employee search on the main screen, opened with "/" or Ctrl/⌘+K.
+export default function GlobalSearch({ platform, onPickEmployee }) {
   const [q, setQ] = useState('')
   const [result, setResult] = useState(null)
   const [open, setOpen] = useState(false)
@@ -48,14 +48,10 @@ export default function GlobalSearch({ platform, onPickClient, onPickEmployee })
     return () => { stale = true; clearTimeout(t) }
   }, [q])
 
-  const items = result
-    ? [...result.clients.map((c) => ({ kind: 'client', key: `c:${c.id}`, ...c })),
-       ...result.employees.map((e) => ({ kind: 'employee', key: `e:${e.client_id}:${e.code}`, ...e }))]
-    : []
+  const items = result ? result.employees.map((e) => ({ key: `${e.client_id}:${e.code}`, ...e })) : []
 
   const pick = (item) => {
-    if (item.kind === 'client') onPickClient(item.id)
-    else onPickEmployee(item.client_id, item.code)
+    onPickEmployee(item.client_id, item.code)
     setOpen(false)
     setQ('')
     input.current?.blur()
@@ -73,20 +69,14 @@ export default function GlobalSearch({ platform, onPickClient, onPickEmployee })
     <li key={item.key} id={`gs-${i}`} role="option" aria-selected={i === active}
         className={i === active ? 'active' : undefined}
         onMouseEnter={() => setActive(i)} onMouseDown={(e) => { e.preventDefault(); pick(item) }}>
-      <span className="gs-icon" aria-hidden="true">{item.kind === 'client' ? '▦' : '☺'}</span>
+      <span className="gs-icon" aria-hidden="true">☺</span>
       <span className="gs-text">
-        <strong>{item.kind === 'client' ? item.legal_name : item.name}</strong>
-        <span className="muted small">
-          {item.kind === 'client'
-            ? `${item.id} · ${item.state}`
-            : `${item.code}${platform ? ` · ${item.client_name}` : ''}${item.active ? '' : ' · left'}`}
-        </span>
+        <strong>{item.name}</strong>
+        <span className="muted small">{`${item.code}${platform ? ` · ${item.client_name}` : ''}${item.active ? '' : ' · left'}`}</span>
       </span>
     </li>
   )
 
-  const clients = items.filter((i) => i.kind === 'client')
-  const employees = items.filter((i) => i.kind === 'employee')
   const showMenu = open && q.trim().length >= 2
 
   return (
@@ -96,8 +86,8 @@ export default function GlobalSearch({ platform, onPickClient, onPickEmployee })
         ref={input}
         type="search"
         value={q}
-        placeholder={platform ? 'Search clients and employees' : 'Search employees'}
-        aria-label="Search clients and employees"
+        placeholder="Search employees by name or code"
+        aria-label="Search employees"
         role="combobox"
         aria-expanded={showMenu}
         aria-controls="gs-list"
@@ -111,12 +101,9 @@ export default function GlobalSearch({ platform, onPickClient, onPickEmployee })
         <div className="gs-menu">
           {error && <p className="banner error">{error}</p>}
           {!result && !error && <p className="muted small gs-empty">Searching…</p>}
-          {result && items.length === 0 && <p className="muted small gs-empty">No clients or employees match “{result.query}”.</p>}
-          <ul id="gs-list" role="listbox" aria-label="Search results">
-            {clients.length > 0 && <li className="gs-group" role="presentation">Clients</li>}
-            {clients.map((c) => row(c, items.indexOf(c)))}
-            {employees.length > 0 && <li className="gs-group" role="presentation">Employees</li>}
-            {employees.map((e) => row(e, items.indexOf(e)))}
+          {result && items.length === 0 && <p className="muted small gs-empty">No employees match “{result.query}”.</p>}
+          <ul id="gs-list" role="listbox" aria-label="Employees found">
+            {items.map(row)}
           </ul>
         </div>
       )}

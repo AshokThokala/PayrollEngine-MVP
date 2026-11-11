@@ -290,5 +290,5 @@ def test_search_api(client, ops):
         "code": "E1", "name": "Ravi", "joined_on": "2026-04-01", "components": {"basic": 30000}})
     r = client.get("/search?q=rav", headers=ops).json()
     assert r["employees"][0]["code"] == "E1" and r["employees"][0]["active"] is True
-    assert client.get("/search?q=acm", headers=ops).json()["clients"][0]["id"] == "acme"
+    assert client.get("/search?q=acm", headers=ops).json() == {"query": "acm", "employees": []}
     assert client.get("/search?q=ra").status_code == 401

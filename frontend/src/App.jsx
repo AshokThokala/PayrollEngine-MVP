@@ -95,7 +95,6 @@ function AdminShell({ user, onLogout, onViewAs }) {
   const [tab, setTab] = useState(platform ? 'clients' : 'employees')
   const [error, setError] = useState('')
   const [openEmployee, setOpenEmployee] = useState(null) // from search: { code, n }
-  const [openClient, setOpenClient] = useState(null)
   const [ruleCategory, setRuleCategory] = useState(null) // Tax rules → open Compliance rules on a category
 
   const loadClients = useCallback(async () => {
@@ -157,11 +156,6 @@ function AdminShell({ user, onLogout, onViewAs }) {
           <h1 className="page-title">{nav.find((n) => n.id === tab)?.label}</h1>
           <GlobalSearch
             platform={platform}
-            onPickClient={(id) => {
-              setClientId(id)
-              setOpenClient({ id, n: Date.now() })
-              setTab(platform ? 'clients' : 'employees')
-            }}
             onPickEmployee={(cid, code) => {
               setClientId(cid)
               setOpenEmployee({ clientId: cid, code, n: Date.now() })
@@ -181,7 +175,6 @@ function AdminShell({ user, onLogout, onViewAs }) {
           {tab === 'clients' && platform && (
             <ClientsPage
               clients={clients}
-              openRequest={openClient}
               onCreated={async (id) => {
                 await loadClients()
                 setClientId(id)
