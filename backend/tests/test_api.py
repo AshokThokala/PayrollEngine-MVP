@@ -254,13 +254,13 @@ def test_employee_invite_and_onboarding_api(client, ops):
     token = inv.json()["path"].split("/")[-1]
     assert client.get(f"/invite/{token}").json()["employee_name"] == "Ravi"
     r = client.post(f"/invite/{token}/accept", json={"name": "Ravi K", "password": "short"})
-    assert r.status_code == 409 and r.json()["errors"][0]["field"] == "password"
+    assert r.status_code == 422 and r.json()["errors"][0]["field"] == "password"
     r = client.post(f"/invite/{token}/accept", json={"name": "Ravi K", "password": "Payroll123"})
     assert r.status_code == 201
     ravi = {"Authorization": f"Bearer {r.json()['token']}"}
 
     r = client.put("/me/onboarding", headers=ravi, json={"phone": "123", "submit": True})
-    assert r.status_code == 409
+    assert r.status_code == 422
     labels = {e["field"]: e["label"] for e in r.json()["errors"]}
     assert labels["phone"] == "Mobile number" and labels["account_number"] == "Bank account number"
     good = {"phone": "9876543210", "date_of_birth": "1995-06-15", "address": "Road 1", "city": "Hyderabad",
