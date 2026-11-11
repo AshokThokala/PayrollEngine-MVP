@@ -34,7 +34,8 @@ docker compose down -v            # stop and DELETE all data
 | **Employee** | *I'm an employee* with the client ID and their employee code; their employer approves the account | Their own profile, final (locked) payslips and tax declarations |
 
 Passwords are hashed with scrypt; logins last 12 hours. Set `SECRET_KEY` (see `backend/.env.example`).
-A payroll run must be approved by a different admin from the one who calculated it.
+The admin who processed a payroll run can approve it. Set `REQUIRE_SEPARATE_APPROVER=true` to require a different
+admin (maker-checker).
 
 ### Working in the app
 - **Employee search** (top of every admin page; press `/` or Ctrl/⌘+K): finds employees by name or code, across every
@@ -73,7 +74,7 @@ A payroll run must be approved by a different admin from the one who calculated 
 1. **Clients** - add a client firm. Only states that have compliance rules can be chosen.
 2. **Employees** - add employees with their monthly salary split; you are warned if basic + DA is under 50%.
 3. **Payroll runs** - pick a month and *Calculate draft*. Open payslips to see every line.
-   A different admin approves it, then *Lock run* freezes it and employees can see their payslips.
+   *Approve* it (the same admin may approve), then *Lock run* freezes it and employees can see their payslips.
 4. **Compliance calendar** - locking creates PF, ESI, TDS, PT, LWF and Form 24Q items with due dates.
    Enter the challan reference and mark them paid or filed. Overdue items are highlighted.
 5. **Compliance rules** - one row per rule (scope, in force since, versions). Click a rule to open it in the editor
@@ -157,7 +158,7 @@ uvicorn app.api.main:app --reload      # API docs at http://localhost:8000/docs
 ```
 
 Every API call except login, sign-up and `/rules/states` needs `Authorization: Bearer <token>` from `POST /auth/login`.
-A run must be approved by a different user from the one who prepared it.
+The preparer may approve their own run unless `REQUIRE_SEPARATE_APPROVER=true`.
 
 ## Local PostgreSQL
 

@@ -1,7 +1,7 @@
 """Payroll workflow: employees, monthly runs (draft -> approved -> locked), filings.
 
 Rules enforced here:
-- Maker-checker: the person who approves a run cannot be the person who prepared it.
+- Approval: the person who prepared a run may approve it, unless REQUIRE_SEPARATE_APPROVER=true (maker-checker).
 - A locked run can never be recalculated or changed.
 - Every change is written to the audit log.
 """
@@ -30,6 +30,12 @@ VARIANCE_THRESHOLD = Decimal("0.10")
 YTD_KEYS = ("ytd_taxable_gross", "ytd_tds", "ytd_basic_da", "ytd_hra", "ytd_pt", "ytd_pf")
 TAX_REGIMES = ("new", "old")
 AGE_GROUPS = ("below_60", "60_to_80", "80_plus")
+
+
+def separate_approver_required() -> bool:
+    """REQUIRE_SEPARATE_APPROVER=true brings back maker-checker (a different admin must approve).
+    Off by default: the person who processed payroll can approve it."""
+    return os.environ.get("REQUIRE_SEPARATE_APPROVER", "").strip().lower() in ("1", "true", "yes", "on")
 
 
 class ServiceError(ValueError):
@@ -365,11 +371,12 @@ class PayrollService:
         run = self.repo.get_run(run_id)
         if run.status != RunStatus.DRAFT:
             raise ServiceError(f"Only a draft can be approved (run is {run.status.value})")
-        if user == run.prepared_by:
+        self_approved = user == run.prepared_by
+        if self_approved and separate_approver_required():
             raise ServiceError("Maker-checker: the preparer cannot approve their own run")
         run.status, run.approved_by = RunStatus.APPROVED, user
         self.repo.save_run(run)
-        self._audit(user, "run.approve", run_id)
+        self._audit(user, "run.approve", run_id, "approved by the preparer" if self_approved else "")
         return run
 
     def lock(self, run_id: str, user: str) -> list[Filing]:
