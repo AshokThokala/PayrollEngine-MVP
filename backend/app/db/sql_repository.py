@@ -11,8 +11,9 @@ from datetime import date, datetime
 from decimal import Decimal
 from typing import Any, Iterator
 
-from ..domain import (AuditEvent, Client, EmployeeRecord, Filing, FilingStatus,
-                      PayrollRun, Role, RunStatus, RunSummary, StatutoryRule, User, UserStatus)
+from ..domain import (AuditEvent, BillingPlan, Client, EmployeeRecord, Filing, FilingStatus, Invoice,
+                      InvoiceStatus, PayrollRun, Role, RunStatus, RunSummary, StatutoryRule, User,
+                      UserStatus)
 from ..engine.models import Employee, Line, Payslip, SalaryStructure
 from ..repository import NotFound
 from .connection import Database
@@ -396,6 +397,64 @@ class SqlRepository:
         with self._tx() as c:
             rows = c.all(sql + " ORDER BY client_id, role, email", *args)
         return [self._user(r) for r in rows]
+
+
+    # --- billing ------------------------------------------------------------------------
+    _PLAN_COLS = ("client_id, plan, rate_per_employee, minimum_fee, onboarding_fee, gst_rate,"
+                  " billing_email, starts_on")
+    _INV_COLS = ("id, client_id, number, period, status, lines, subtotal, cgst, sgst, igst, total,"
+                 " issue_date, due_date, paid_on, payment_ref")
+
+    def save_billing_plan(self, plan: BillingPlan) -> None:
+        with self._tx() as c:
+            c.run("DELETE FROM billing_plans WHERE client_id = ?", plan.client_id)
+            c.run(f"INSERT INTO billing_plans ({self._PLAN_COLS}) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                  plan.client_id, plan.plan, plan.rate_per_employee, plan.minimum_fee,
+                  plan.onboarding_fee, plan.gst_rate, plan.billing_email, plan.starts_on)
+
+    def get_billing_plan(self, client_id: str) -> BillingPlan | None:
+        with self._tx() as c:
+            row = c.one(f"SELECT {self._PLAN_COLS} FROM billing_plans WHERE client_id = ?", client_id)
+        if not row:
+            return None
+        cid, plan, rate, minimum, onboarding, gst, email, starts = row
+        return BillingPlan(cid, plan, _dec(rate), _dec(minimum), _dec(onboarding), _dec(gst), email, _date(starts))
+
+    @staticmethod
+    def _invoice(row) -> Invoice:
+        (iid, cid, number, period, status, lines, subtotal, cgst, sgst, igst, total,
+         issue_date, due_date, paid_on, ref) = row
+        return Invoice(iid, cid, _date(period), InvoiceStatus(status), json.loads(lines), _dec(subtotal),
+                       _dec(cgst), _dec(sgst), _dec(igst), _dec(total), number, _date(issue_date),
+                       _date(due_date), _date(paid_on), ref)
+
+    def save_invoice(self, invoice: Invoice) -> None:
+        with self._tx() as c:
+            if invoice.number:
+                clash = c.one("SELECT id FROM invoices WHERE number = ?", invoice.number)
+                if clash and clash[0] != invoice.id:
+                    raise ValueError(f"Invoice number {invoice.number} already used")
+            c.run("DELETE FROM invoices WHERE id = ?", invoice.id)
+            c.run(f"INSERT INTO invoices ({self._INV_COLS}) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                  invoice.id, invoice.client_id, invoice.number, invoice.period, invoice.status.value,
+                  json.dumps(invoice.lines, default=str), invoice.subtotal, invoice.cgst, invoice.sgst,
+                  invoice.igst, invoice.total, invoice.issue_date, invoice.due_date, invoice.paid_on,
+                  invoice.payment_ref)
+
+    def get_invoice(self, invoice_id: str) -> Invoice:
+        with self._tx() as c:
+            row = c.one(f"SELECT {self._INV_COLS} FROM invoices WHERE id = ?", invoice_id)
+        if not row:
+            raise NotFound(f"Invoice {invoice_id!r} not found")
+        return self._invoice(row)
+
+    def list_invoices(self, client_id: str | None = None) -> list[Invoice]:
+        sql, args = f"SELECT {self._INV_COLS} FROM invoices", ()
+        if client_id is not None:
+            sql, args = sql + " WHERE client_id = ?", (client_id,)
+        with self._tx() as c:
+            rows = c.all(sql + " ORDER BY period DESC, client_id DESC", *args)
+        return [self._invoice(r) for r in rows]
 
 
 class _Cursor:

@@ -55,6 +55,14 @@ FIELD_LABELS = {
     "sec_80d_self": "80D self/family (₹/year)",
     "sec_80d_parents": "80D parents (₹/year)",
     "home_loan_interest": "Home loan interest (₹/year)",
+    # billing
+    "plan": "Plan",
+    "rate_per_employee": "Rate per employee",
+    "minimum_fee": "Monthly minimum",
+    "onboarding_fee": "Onboarding fee",
+    "billing_email": "Billing email",
+    "month": "Month",
+    "reference": "Payment reference",
     # filings
     "status": "Status",
     "challan_ref": "Challan / ack reference",

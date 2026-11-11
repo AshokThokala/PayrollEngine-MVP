@@ -233,3 +233,21 @@ class EmployeeUpdate(BaseModel):
     name: str | None = None
     components: dict[str, Amount] | None = None
     flags: dict[str, bool | None] | None = None
+
+
+class PlanIn(BaseModel):
+    plan: str
+    rate_per_employee: Decimal | None = None
+    minimum_fee: Decimal | None = None
+    onboarding_fee: Decimal | None = None
+    billing_email: str = ""
+    starts_on: date | None = None
+
+
+class InvoiceIn(BaseModel):
+    month: date
+
+
+class InvoicePayment(BaseModel):
+    paid_on: date
+    reference: str = ""

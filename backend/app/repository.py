@@ -9,8 +9,8 @@ from datetime import date
 from decimal import Decimal
 from typing import Protocol
 
-from .domain import (AuditEvent, Client, EmployeeRecord, Filing, PayrollRun, RunStatus, RunSummary,
-                     StatutoryRule, User)
+from .domain import (AuditEvent, BillingPlan, Client, EmployeeRecord, Filing, Invoice, PayrollRun,
+                     RunStatus, RunSummary, StatutoryRule, User)
 from .engine.models import Payslip
 
 
@@ -47,6 +47,11 @@ class Repository(Protocol):
     def list_rules(self) -> list[StatutoryRule]: ...
 
     def save_user(self, user: User) -> None: ...
+    def save_billing_plan(self, plan: BillingPlan) -> None: ...
+    def get_billing_plan(self, client_id: str) -> BillingPlan | None: ...
+    def save_invoice(self, invoice: Invoice) -> None: ...
+    def get_invoice(self, invoice_id: str) -> Invoice: ...
+    def list_invoices(self, client_id: str | None = None) -> list[Invoice]: ...
     def get_user(self, user_id: str) -> User: ...
     def find_user_by_email(self, email: str) -> User | None: ...
     def list_users(self, client_id: str | None = None) -> list[User]: ...
@@ -61,6 +66,8 @@ class InMemoryRepository:
         self._audit: list[AuditEvent] = []
         self._rules: dict[str, StatutoryRule] = {}
         self._users: dict[str, User] = {}
+        self._plans: dict[str, BillingPlan] = {}
+        self._invoices: dict[str, Invoice] = {}
 
     @staticmethod
     def _get(store: dict, key, what: str):
@@ -156,3 +163,23 @@ class InMemoryRepository:
     def list_users(self, client_id: str | None = None) -> list[User]:
         users = [u for u in self._users.values() if client_id in (None, u.client_id)]
         return sorted(users, key=lambda u: (u.client_id or "", u.role.value, u.email))
+
+    def save_billing_plan(self, plan: BillingPlan) -> None:
+        self.get_client(plan.client_id)
+        self._plans[plan.client_id] = plan
+
+    def get_billing_plan(self, client_id: str) -> BillingPlan | None:
+        return self._plans.get(client_id)
+
+    def save_invoice(self, invoice: Invoice) -> None:
+        if invoice.number and any(i.number == invoice.number and i.id != invoice.id
+                                  for i in self._invoices.values()):
+            raise ValueError(f"Invoice number {invoice.number} already used")
+        self._invoices[invoice.id] = invoice
+
+    def get_invoice(self, invoice_id: str) -> Invoice:
+        return self._get(self._invoices, invoice_id, "Invoice")
+
+    def list_invoices(self, client_id: str | None = None) -> list[Invoice]:
+        items = [i for i in self._invoices.values() if client_id in (None, i.client_id)]
+        return sorted(items, key=lambda i: (i.period, i.client_id), reverse=True)

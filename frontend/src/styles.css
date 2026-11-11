@@ -309,7 +309,6 @@ button.ghost.light { color: #fff; }
 .switcher-menu li.active { background: var(--brand-soft); }
 .switcher-menu li.current span:first-child { font-weight: 600; color: var(--brand); }
 .switcher-menu li.empty { cursor: default; }
-.switcher-count { padding: 6px 10px 2px; border-top: 1px solid var(--line); margin-top: 6px; }
 
 /* ---------- clickable records ---------- */
 table.clickable tbody tr { cursor: pointer; }
@@ -341,4 +340,36 @@ tfoot td { border-top: 2px solid var(--line); border-bottom: 0; background: #f7f
 @media (max-width: 520px) {
   .switcher-button { min-width: 0; }
   .switcher-text .muted { display: none; }
+}
+
+/* --- client onboarding --------------------------------------------------------------------- */
+.progress { height: 10px; border-radius: 999px; background: #e6ecea; overflow: hidden; margin: 14px 0 6px; }
+.progress-fill { height: 100%; border-radius: inherit; background: linear-gradient(90deg, var(--brand), var(--saffron, #f2a93b)); transition: width 0.4s ease; }
+.progress-cell { min-width: 160px; }
+.progress-cell .progress { margin: 0 0 4px; height: 8px; }
+.checklist { list-style: none; padding: 0; margin: 18px 0 0; display: flex; flex-direction: column; gap: 10px; }
+.checklist li { display: flex; align-items: center; gap: 14px; padding: 12px 14px; border: 1px solid #e3e9e7; border-radius: 12px; background: #fff; }
+.checklist li.done { background: var(--ok-soft); border-color: #c3e8d4; }
+.check-mark { flex: none; width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; font-weight: 700; background: #eef2f1; color: var(--muted); }
+.checklist li.done .check-mark { background: var(--ok); color: #fff; }
+.check-body { flex: 1; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.ok-text { color: var(--ok); }
+.warn-text { color: var(--warn); }
+.error-text { color: var(--error); font-weight: 600; }
+
+/* --- billing ----------------------------------------------------------------------------- */
+.invoice { margin-top: 18px; padding: 20px; border: 1px solid #e3e9e7; border-radius: 12px; background: #fff; }
+.invoice-head { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
+.invoice-head > div { display: flex; flex-direction: column; gap: 2px; }
+.invoice-head .right { text-align: right; }
+.invoice-brand { font-family: 'Poppins', sans-serif; font-size: 1.2rem; color: var(--brand); }
+.invoice tfoot td { border-top: 1px solid #e3e9e7; }
+.invoice tfoot tr.total td { font-weight: 700; font-size: 1rem; }
+.invoice .actions { margin-top: 14px; }
+.pay-row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-top: 12px; }
+
+@media print {
+  .sidebar, .topbar, .no-print, .banner { display: none !important; }
+  .main-col, main, .grid, .stack, .card { display: block; padding: 0; margin: 0; border: 0; box-shadow: none; background: #fff; }
+  .invoice { border: 0; padding: 0; }
 }

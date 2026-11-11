@@ -44,6 +44,15 @@ A payroll run must be approved by a different admin from the one who calculated 
   the employee has no login yet.
 - **Reports**: salary register, statutory dues by month, payroll cost trend (with chart), compliance status and
   income tax summary - each with totals and *Download CSV*.
+- **Client onboarding**: a 7-step checklist per client (company details, statutory registrations, client admin
+  login, billing plan, employees, salary structures, first locked payroll) with a progress bar and a *Go* button to
+  the page that finishes each step. Platform admins also see every client, least complete first.
+- **Billing** (platform admin): set the plan - *Software only* (₹60 per employee a month) or *Managed payroll and
+  compliance* (₹150 per employee, ₹5,000 monthly minimum, ₹15,000 one-time onboarding) - with any custom rate.
+  *Generate invoice* for a month with a locked payroll run (headcount = employees paid that month), check the draft,
+  *Issue invoice* (number CP4U/FY/0001, due in 15 days), then *Mark paid* with the UTR. GST is 18%: CGST + SGST
+  when the client is in the provider's state (`PROVIDER_STATE`, default TG), otherwise IGST. *Print / save PDF*
+  prints just the invoice. Client admins see their plan and issued invoices; drafts stay internal.
 
 ### Using the UI
 1. **Clients** - add a client firm. Only states that have compliance rules can be chosen.
@@ -180,6 +189,8 @@ python -m pytest
 | `payslip_warnings` | Warnings per payslip |
 | `filings` | Compliance calendar: due dates, status, challan reference |
 | `audit_events` | Append-only audit log (UPDATE/DELETE blocked on Postgres) |
+| `billing_plans` | One billing plan per client: plan, rates, billing email |
+| `invoices` | Monthly invoices: lines (JSON), GST split, number, status, payment reference |
 | `statutory_rules` | Compliance rules: one row per dated version (scope, category, valid_from/to, JSON values, source) |
 | `schema_migrations` | Applied migrations |
 

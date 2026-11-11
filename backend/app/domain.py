@@ -166,3 +166,43 @@ class RunSummary:
     total_gross: Decimal
     total_net: Decimal
     total_employer_cost: Decimal
+
+
+class InvoiceStatus(str, enum.Enum):
+    DRAFT = "draft"
+    ISSUED = "issued"
+    PAID = "paid"
+    VOID = "void"
+
+
+@dataclass
+class BillingPlan:
+    """What a client pays for the payroll service."""
+
+    client_id: str
+    plan: str  # "software" or "managed"
+    rate_per_employee: Decimal  # per employee per month
+    minimum_fee: Decimal  # monthly minimum
+    onboarding_fee: Decimal  # one-time, on the first invoice
+    gst_rate: Decimal = Decimal("0.18")
+    billing_email: str = ""
+    starts_on: date | None = None
+
+
+@dataclass
+class Invoice:
+    id: str  # client_id:YYYY-MM
+    client_id: str
+    period: date  # last day of the month billed
+    status: InvoiceStatus
+    lines: list[dict]  # {description, quantity, rate, amount}
+    subtotal: Decimal
+    cgst: Decimal
+    sgst: Decimal
+    igst: Decimal
+    total: Decimal
+    number: str | None = None  # assigned when issued, e.g. CP4U/2026-27/0001
+    issue_date: date | None = None
+    due_date: date | None = None
+    paid_on: date | None = None
+    payment_ref: str | None = None
