@@ -64,6 +64,23 @@ A payroll run must be approved by a different admin from the one who calculated 
 Not yet covered: perquisites, employer NPS (80CCD(2)), income from other sources or a previous employer.
 
 
+## Scaling
+
+The app is built so it can grow by adding capacity rather than rewriting:
+
+| Area | What is in place |
+| --- | --- |
+| Stateless API | Logins are signed tokens, so any worker or container can serve any request. Run several API containers behind a load balancer with the same `SECRET_KEY`. |
+| Worker processes | `WEB_CONCURRENCY` uvicorn workers per container (default 2). |
+| Database connections | One PostgreSQL connection pool per worker (`DB_POOL_SIZE`, default 10) instead of a new connection per call. Keep workers × pool size × containers below Postgres `max_connections`. |
+| Rules cache | Compliance rules are cached per worker for `RULES_CACHE_SECONDS` (default 30); saving a rule clears it at once in that worker. |
+| Queries | Run lists use one aggregate query (no payslips loaded); TDS reads only this financial year's locked runs; the employee portal fetches only that employee's payslips; indexes for each of these (migration 006). |
+| Responses | Gzip from the API and nginx; built JS/CSS cached for a year (hashed file names), `index.html` never cached. |
+| Lists | Filings and users accept `limit` / `offset` (default 500). |
+
+Next steps when volume needs them: a shared cache (e.g. Redis) for rules and sessions, background jobs for
+large payroll runs and report exports, read replicas for reporting, and partitioning `audit_events` by month.
+
 ## Theme
 "Clear books": **navy** `#0f2a3a` for trust (sidebar, headers), **emerald** `#0b7a63` for primary actions and
 "paid / compliant" states, and a small **saffron** `#e8a317` accent (logo, active item, portal header line).

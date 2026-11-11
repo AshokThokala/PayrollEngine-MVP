@@ -18,7 +18,8 @@ BACKENDS = ["memory", "sqlite", "postgres"]
 @pytest.fixture(params=BACKENDS)
 def repo(request, tmp_path):
     if request.param == "memory":
-        return InMemoryRepository()
+        yield InMemoryRepository()
+        return
     if request.param == "sqlite":
         db = database_from_url(f"sqlite:///{tmp_path / 'test.db'}")
     else:
@@ -33,4 +34,6 @@ def repo(request, tmp_path):
         conn.commit()
         conn.close()
     migrate(db)
-    return SqlRepository(db)
+    yield SqlRepository(db)
+    if db.pool is not None:
+        db.pool.close()

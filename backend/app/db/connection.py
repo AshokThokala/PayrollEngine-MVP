@@ -6,10 +6,12 @@ DATABASE_URL examples:
 """
 from __future__ import annotations
 
+import os
 import sqlite3
+from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any, Callable, Iterator
 
 MIGRATIONS_DIR = Path(__file__).resolve().parent / "migrations"
 
@@ -22,14 +24,35 @@ SERIAL_PK = {
 @dataclass(frozen=True)
 class Database:
     dialect: str  # "postgres" | "sqlite"
-    connect: Callable[[], Any]
+    connect: Callable[[], Any]  # a new, unpooled connection (migrations, tests)
+    pool: Any = None  # psycopg_pool.ConnectionPool for PostgreSQL
+
+    @contextmanager
+    def session(self) -> Iterator[Any]:
+        """A connection for one unit of work: borrowed from the pool when there is one."""
+        if self.pool is not None:
+            with self.pool.connection() as conn:
+                yield conn
+            return
+        conn = self.connect()
+        try:
+            yield conn
+        finally:
+            conn.close()
 
 
 def database_from_url(url: str) -> Database:
     if url.startswith(("postgresql://", "postgres://")):
         import psycopg  # imported lazily so SQLite tests need no driver
 
-        return Database("postgres", lambda: psycopg.connect(url))
+        pool = None
+        if os.environ.get("DB_POOL_SIZE", "10") != "0":
+            from psycopg_pool import ConnectionPool
+
+            # One pool per API worker process; connections are reused across requests.
+            pool = ConnectionPool(url, min_size=1, max_size=int(os.environ.get("DB_POOL_SIZE", "10")),
+                                  open=True, name="clearpay4u")
+        return Database("postgres", lambda: psycopg.connect(url), pool)
     if url.startswith("sqlite:///"):
         path = url[len("sqlite:///"):]
 

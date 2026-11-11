@@ -17,7 +17,8 @@ export default function RunsPage({ client, user }) {
   const [employees, setEmployees] = useState([])
   const [month, setMonth] = useState(thisMonth())
   const [inputs, setInputs] = useState({})
-  const [selected, setSelected] = useState(null)
+  const [selectedId, setSelectedId] = useState(null)
+  const [selected, setSelected] = useState(null) // full run with payslips
   const [open, setOpen] = useState({})
   const [message, setMessage] = useState(null)
   const [busy, setBusy] = useState(false)
@@ -27,7 +28,7 @@ export default function RunsPage({ client, user }) {
       const [r, e] = await Promise.all([api.listRuns(client.id), api.listEmployees(client.id)])
       setRuns(r)
       setEmployees(e.filter((emp) => !emp.exited_on || emp.exited_on.slice(0, 7) >= month))
-      setSelected((cur) => (cur ? r.find((x) => x.id === cur.id) || null : r[0] || null))
+      setSelectedId((cur) => (cur && r.some((x) => x.id === cur) ? cur : r[0]?.id || null))
     } catch (err) {
       setMessage({ kind: 'error', text: err.message })
     }
@@ -36,6 +37,19 @@ export default function RunsPage({ client, user }) {
   useEffect(() => {
     load()
   }, [load])
+
+  // The list has totals only; load the chosen run's payslips on demand.
+  useEffect(() => {
+    if (!selectedId) {
+      setSelected(null)
+      return
+    }
+    let stale = false
+    api.getRun(selectedId).then((run) => { if (!stale) setSelected(run) }).catch((err) => {
+      if (!stale) setMessage({ kind: 'error', text: err.message })
+    })
+    return () => { stale = true }
+  }, [selectedId, runs])
 
   const setInput = (code, key, value) =>
     setInputs({ ...inputs, [code]: { ...(inputs[code] || {}), [key]: value } })
@@ -65,7 +79,10 @@ export default function RunsPage({ client, user }) {
       if (Object.keys(entry).length) body.inputs[code] = entry
     })
     const run = await act(() => api.createRun(client.id, body), `Draft for ${month} calculated.`)
-    if (run) setSelected(run)
+    if (run) {
+      setSelected(run)
+      setSelectedId(run.id)
+    }
   }
 
   return (
@@ -104,7 +121,7 @@ export default function RunsPage({ client, user }) {
           <ul className="list">
             {runs.map((r) => (
               <li key={r.id}>
-                <button className={selected?.id === r.id ? 'list-item active' : 'list-item'} onClick={() => setSelected(r)}>
+                <button className={selectedId === r.id ? 'list-item active' : 'list-item'} onClick={() => setSelectedId(r.id)}>
                   <span>{r.period.slice(0, 7)}</span>
                   <span className={`tag ${r.status}`}>{r.status}</span>
                   <span className="num">{money(r.total_net)}</span>

@@ -83,6 +83,7 @@ export const api = {
     request('POST', `/clients/${enc(clientId)}/employees/${enc(code)}/exit`, { exit_on: exitOn }),
   listRuns: (clientId) => request('GET', `/clients/${enc(clientId)}/runs`),
   createRun: (clientId, body) => request('POST', `/clients/${enc(clientId)}/runs`, body),
+  getRun: (runId) => request('GET', `/runs/${enc(runId)}`),
   approveRun: (runId) => request('POST', `/runs/${enc(runId)}/approve`),
   lockRun: (runId) => request('POST', `/runs/${enc(runId)}/lock`),
   listFilings: (clientId) =>

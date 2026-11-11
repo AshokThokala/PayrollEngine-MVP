@@ -110,6 +110,19 @@ class RunOut(BaseModel):
     slips: list[PayslipOut]
 
 
+class RunSummaryOut(BaseModel):
+    id: str
+    client_id: str
+    period: date
+    status: str
+    prepared_by: str
+    approved_by: str | None
+    employees: int
+    total_gross: Decimal
+    total_net: Decimal
+    total_employer_cost: Decimal
+
+
 class FilingOut(BaseModel):
     id: str
     client_id: str

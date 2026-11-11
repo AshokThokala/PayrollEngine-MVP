@@ -8,6 +8,8 @@ Rules enforced here:
 from __future__ import annotations
 
 import calendar
+import os
+import time
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
@@ -63,12 +65,26 @@ class PayrollService:
         self.repo = repo
         self._fixed_rules = rules
         self.clock = clock
+        self._rules_cache: tuple[float, RuleBook] | None = None
+
+    # Rules change rarely, so each API worker keeps them for a short time instead of
+    # reading the table on every request. Writes in this process clear it at once;
+    # other workers see a change within RULES_CACHE_SECONDS (default 30).
+    RULES_CACHE_SECONDS = float(os.environ.get("RULES_CACHE_SECONDS", "30"))
 
     @property
     def rules(self) -> RuleBook:
         if self._fixed_rules is not None:
             return self._fixed_rules
-        return RuleBook.from_records(self.repo.list_rules())
+        now = time.monotonic()
+        if self._rules_cache and now - self._rules_cache[0] < self.RULES_CACHE_SECONDS:
+            return self._rules_cache[1]
+        book = RuleBook.from_records(self.repo.list_rules())
+        self._rules_cache = (now, book)
+        return book
+
+    def _rules_changed(self) -> None:
+        self._rules_cache = None
 
     # --- compliance rules ------------------------------------------------------
     def ensure_rules_seeded(self, user: str = "system") -> int:
@@ -106,6 +122,7 @@ class PayrollService:
             existing[rule.id] = rule
             changes += 1
         if changes:
+            self._rules_changed()
             self._audit(user, "rules.seed", "statutory_rules", f"{changes} default rule rows added or filled")
         return changes
 
@@ -126,6 +143,7 @@ class PayrollService:
             return rule
         rule.params, rule.source = cleaned, source.strip()
         self.repo.save_rule(rule)
+        self._rules_changed()
         self._audit(user, "rule.edit", rule.id, "changed: " + ", ".join(changed))
         return rule
 
@@ -189,6 +207,7 @@ class PayrollService:
         rule = StatutoryRule(scope, category, valid_from, cleaned, None, source.strip(),
                              created_by=user, created_at=self.clock())
         self.repo.save_rule(rule)
+        self._rules_changed()
         self._audit(user, "rule.create", rule.id,
                     f"closed {previous.id} on {previous.valid_to}" if previous else "first version")
         return rule, previous
@@ -263,8 +282,12 @@ class PayrollService:
 
         rules = self.rules  # read once for the whole run
         days = calendar.monthrange(end.year, end.month)[1]
-        ytd = self._ytd(client_id, end)
-        previous = self._previous_locked(client_id, end)
+        # Only the locked runs we need: this financial year, plus last month for the
+        # variance check (which may fall in the previous year).
+        prev_month_start = (end.replace(day=1) - timedelta(days=1)).replace(day=1)
+        recent = self._locked_runs(client_id, since=min(fy_start(end), prev_month_start), before=end)
+        ytd = self._ytd(recent, end)
+        previous = recent[-1] if recent else None
         run = PayrollRun(run_id, client_id, end, RunStatus.DRAFT, prepared_by=user)
 
         for record in sorted(active, key=lambda r: r.code):
@@ -330,18 +353,16 @@ class PayrollService:
         except LookupError:
             return None
 
-    def _locked_runs(self, client_id: str) -> list[PayrollRun]:
-        return [r for r in self.repo.list_runs(client_id) if r.status == RunStatus.LOCKED]
+    def _locked_runs(self, client_id: str, since: date | None = None,
+                     before: date | None = None) -> list[PayrollRun]:
+        return self.repo.list_runs(client_id, status=RunStatus.LOCKED, since=since, before=before)
 
-    def _previous_locked(self, client_id: str, end: date) -> PayrollRun | None:
-        earlier = [r for r in self._locked_runs(client_id) if r.period < end]
-        return earlier[-1] if earlier else None
-
-    def _ytd(self, client_id: str, end: date) -> dict[str, dict[str, Decimal]]:
+    @staticmethod
+    def _ytd(runs: list[PayrollRun], end: date) -> dict[str, dict[str, Decimal]]:
         """Year-to-date totals per employee from locked runs earlier in the same FY."""
         start = fy_start(end)
         totals: dict[str, dict[str, Decimal]] = {}
-        for run in self._locked_runs(client_id):
+        for run in runs:
             if start <= run.period < end:
                 for code, slip in run.slips.items():
                     t = totals.setdefault(code, {k: Decimal(0) for k in YTD_KEYS})
