@@ -1,4 +1,4 @@
-import { cloneElement, useEffect, useRef, useState } from 'react'
+import { cloneElement, useEffect, useState } from 'react'
 import { api } from '../api.js'
 import InfoTip from '../components/InfoTip.jsx'
 
@@ -36,7 +36,7 @@ function Field({ name, label, error, children }) {
 
 const EMPTY = { id: '', legal_name: '', state: 'TG', pan: '', tan: '', pf_code: '', esi_code: '', pt_registration: '' }
 
-export default function ClientsPage({ clients, onCreated, onOpen, onUpdated, openRequest }) {
+export default function ClientsPage({ clients, onCreated, onOpen, onUpdated }) {
   const [mode, setMode] = useState('none') // none | add | edit
   const [selectedId, setSelectedId] = useState(null)
   const [form, setForm] = useState(EMPTY)
@@ -70,17 +70,6 @@ export default function ClientsPage({ clients, onCreated, onOpen, onUpdated, ope
     setFieldErrors({})
     setMessage(null)
   }
-
-  // Opened from the search box.
-  const handled = useRef(null)
-  useEffect(() => {
-    if (!openRequest || handled.current === openRequest.n) return
-    const c = clients.find((x) => x.id === openRequest.id)
-    if (!c) return
-    handled.current = openRequest.n
-    select(c)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [openRequest, clients])
 
   const submit = async (e) => {
     e.preventDefault()
