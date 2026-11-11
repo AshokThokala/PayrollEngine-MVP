@@ -132,8 +132,7 @@ export default function ClientsPage({ clients, onCreated, onOpen, onUpdated }) {
       {mode === 'none' ? (
         <section className="card empty-state">
           <h2>Client details</h2>
-          <p className="muted">Select a client on the left to see and edit its details, or add a new one.</p>
-          <button onClick={startAdd}>+ Add client</button>
+          <p className="muted">Select a client on the left to see and edit its details.</p>
         </section>
       ) : (
         <section className="card allow-overflow">

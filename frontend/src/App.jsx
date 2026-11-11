@@ -2,6 +2,8 @@ import { useCallback, useEffect, useState } from 'react'
 import { api, loadSession, saveSession, stashAdminSession, stashedAdminSession, whenLoggedOut } from './api.js'
 import ClientSwitcher from './components/ClientSwitcher.jsx'
 import AuthScreen from './pages/AuthScreen.jsx'
+import BillingPage from './pages/BillingPage.jsx'
+import ClientOnboardingPage from './pages/ClientOnboardingPage.jsx'
 import ClientsPage from './pages/ClientsPage.jsx'
 import EmployeesPage from './pages/EmployeesPage.jsx'
 import EmployeePortal from './pages/EmployeePortal.jsx'
@@ -52,11 +54,13 @@ export default function App() {
 
 const NAV = [
   { id: 'clients', label: 'Clients', icon: '▦', platformOnly: true },
+  { id: 'onboarding', label: 'Client onboarding', icon: '✓', needsClient: true },
   { id: 'employees', label: 'Employees', icon: '☺', needsClient: true },
   { id: 'runs', label: 'Payroll runs', icon: '₹', needsClient: true },
   { id: 'filings', label: 'Compliance calendar', icon: '◷' },
   { id: 'reports', label: 'Reports', icon: '▤', needsClient: true },
   { id: 'users', label: 'Users and access', icon: '⚿' },
+  { id: 'billing', label: 'Billing', icon: '◫', needsClient: true },
   { id: 'rules', label: 'Compliance rules', icon: '§', platformOnly: true },
 ]
 
@@ -154,6 +158,12 @@ function AdminShell({ user, onLogout, onViewAs }) {
           {tab === 'runs' && client && <RunsPage client={client} user={user.email} />}
           {tab === 'filings' && <FilingsPage clientId={clientId} clients={clients} canSeeAll={platform} />}
           {tab === 'reports' && client && <ReportsPage client={client} />}
+          {tab === 'onboarding' && client && (
+            <ClientOnboardingPage client={client} platform={platform} tabs={nav.map((n) => n.id)} onGo={setTab} onPickClient={setClientId} />
+          )}
+          {tab === 'billing' && client && (
+            <BillingPage client={client} platform={platform} onPickClient={setClientId} />
+          )}
           {tab === 'users' && <UsersPage user={user} clients={clients} />}
           {tab === 'rules' && platform && <RulesPage />}
         </main>

@@ -65,7 +65,6 @@ export default function ClientSwitcher({ clients, value, onChange }) {
               </li>
             ))}
           </ul>
-          <div className="muted small switcher-count">{clients.length} client{clients.length === 1 ? '' : 's'}</div>
         </div>
       )}
     </div>

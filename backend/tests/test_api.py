@@ -212,3 +212,34 @@ def test_reports_edit_and_view_as(client, ops, reviewer):
     assert len(client.get("/me/payslips", headers=viewer).json()) == 1
     assert client.put("/me/tax", headers=viewer, json={"tax_regime": "old"}).status_code == 403
     assert client.get("/clients", headers=viewer).status_code == 403
+
+
+def test_onboarding_and_billing_api(client, ops, reviewer):
+    r = client.post("/auth/signup/client", json={"client": {"id": "acme", "legal_name": "Acme", "state": "TG"},
+                                                  "name": "Asha", "email": "asha@acme.in", "password": "Payroll123"})
+    asha = {"Authorization": f"Bearer {r.json()['token']}"}
+    check = client.get("/clients/acme/onboarding", headers=asha).json()
+    assert check["total"] == 7 and {s["key"]: s["done"] for s in check["steps"]}["admin"] is True
+    assert client.get("/onboarding/clients", headers=asha).status_code == 403
+    assert client.get("/onboarding/clients", headers=ops).json()[0]["client_id"] == "acme"
+
+    assert client.put("/clients/acme/billing/plan", headers=asha, json={"plan": "managed"}).status_code == 403
+    plan = client.put("/clients/acme/billing/plan", headers=ops, json={"plan": "managed"}).json()
+    assert float(plan["minimum_fee"]) == 5000
+    client.post("/clients/acme/employees", headers=ops, json={
+        "code": "E1", "name": "Ravi", "joined_on": "2026-04-01", "components": {"basic": 30000}})
+    run = client.post("/clients/acme/runs", headers=ops, json={"period": "2026-10-01"}).json()
+    client.post(f"/runs/{run['id']}/approve", headers=reviewer)
+    client.post(f"/runs/{run['id']}/lock", headers=reviewer)
+    inv = client.post("/clients/acme/invoices", headers=ops, json={"month": "2026-10-01"}).json()
+    assert inv["status"] == "draft"
+    assert client.get("/clients/acme/billing", headers=asha).json()["invoices"] == []  # drafts hidden
+    issued = client.post(f"/invoices/{inv['id']}/issue", headers=ops).json()
+    assert issued["number"].startswith("CP4U/")
+    seen = client.get("/clients/acme/billing", headers=asha).json()["invoices"]
+    assert [i["number"] for i in seen] == [issued["number"]]
+    r = client.post(f"/invoices/{inv['id']}/pay", headers=ops, json={"paid_on": "2026-11-10", "reference": ""})
+    assert r.status_code == 409 and r.json()["errors"][0]["label"] == "Payment reference"
+    paid = client.post(f"/invoices/{inv['id']}/pay", headers=ops, json={"paid_on": "2026-11-10", "reference": "UTR1"})
+    assert paid.json()["status"] == "paid"
+    assert client.get("/billing/overview", headers=ops).status_code == 200

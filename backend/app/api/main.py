@@ -26,6 +26,8 @@ from ..repository import NotFound
 from ..services import AccessDenied, AuthService, MonthInput, PayrollService, ServiceError
 from ..services.compliance import overdue
 from ..services.reports import CATALOG, UnknownReport, run_report
+from ..services.billing import PLANS, BillingService
+from ..services.onboarding import all_clients, client_checklist
 from . import errors
 from . import schemas as s
 
@@ -46,6 +48,11 @@ def get_auth() -> AuthService:
     auth = AuthService(get_service())
     auth.ensure_bootstrap_admin(os.environ.get("ADMIN_EMAIL"), os.environ.get("ADMIN_PASSWORD"))
     return auth
+
+
+@lru_cache
+def get_billing() -> BillingService:
+    return BillingService(get_service())
 
 
 class NotLoggedIn(Exception):
@@ -466,3 +473,83 @@ def get_report(client_id: str, key: str, month: date | None = None, fy: int | No
         return run_report(svc.repo, client_id, key, month=month, fy=fy, today=svc.clock().date())
     except UnknownReport as exc:
         raise NotFound(str(exc)) from exc
+
+
+# --- client onboarding ---------------------------------------------------------------------
+
+@app.get("/onboarding/clients")
+def onboarding_overview(actor: User = Depends(platform_admin), svc: PayrollService = Depends(get_service)):
+    """Every client's onboarding progress, least complete first."""
+    return all_clients(svc)
+
+
+@app.get("/clients/{client_id}/onboarding")
+def onboarding_checklist(client_id: str, actor: User = Depends(admin_user),
+                         svc: PayrollService = Depends(get_service), auth: AuthService = Depends(get_auth)):
+    auth.check_client(actor, client_id)
+    return client_checklist(svc, client_id)
+
+
+# --- billing --------------------------------------------------------------------------------
+
+def _plan_out(p):
+    return None if p is None else {
+        "plan": p.plan, "label": PLANS[p.plan]["label"], "rate_per_employee": p.rate_per_employee,
+        "minimum_fee": p.minimum_fee, "onboarding_fee": p.onboarding_fee, "gst_rate": p.gst_rate,
+        "billing_email": p.billing_email, "starts_on": p.starts_on}
+
+
+def _invoice_out(i):
+    return {"id": i.id, "client_id": i.client_id, "number": i.number, "period": i.period,
+            "status": i.status.value, "lines": i.lines, "subtotal": i.subtotal, "cgst": i.cgst,
+            "sgst": i.sgst, "igst": i.igst, "total": i.total, "issue_date": i.issue_date,
+            "due_date": i.due_date, "paid_on": i.paid_on, "payment_ref": i.payment_ref}
+
+
+@app.get("/billing/plans")
+def billing_plans(actor: User = Depends(admin_user)):
+    return [{"plan": k, **v} for k, v in PLANS.items()]
+
+
+@app.get("/billing/overview")
+def billing_overview(actor: User = Depends(platform_admin), billing: BillingService = Depends(get_billing),
+                     svc: PayrollService = Depends(get_service)):
+    return billing.overview(svc.clock().date())
+
+
+@app.get("/clients/{client_id}/billing")
+def client_billing(client_id: str, actor: User = Depends(admin_user), svc: PayrollService = Depends(get_service),
+                   auth: AuthService = Depends(get_auth)):
+    """Plan and invoices. Client admins see issued, paid and void invoices; drafts are internal."""
+    auth.check_client(actor, client_id)
+    client = svc.repo.get_client(client_id)
+    invoices = [i for i in svc.repo.list_invoices(client_id)
+                if actor.is_platform_admin or i.status.value != "draft"]
+    return {"client": client.__dict__, "plan": _plan_out(svc.repo.get_billing_plan(client_id)),
+            "invoices": [_invoice_out(i) for i in invoices]}
+
+
+@app.put("/clients/{client_id}/billing/plan")
+def set_billing_plan(client_id: str, body: s.PlanIn, actor: User = Depends(platform_admin),
+                     billing: BillingService = Depends(get_billing)):
+    return _plan_out(billing.set_plan(client_id, actor.email, **body.model_dump()))
+
+
+@app.post("/clients/{client_id}/invoices", status_code=201)
+def generate_invoice(client_id: str, body: s.InvoiceIn, actor: User = Depends(platform_admin),
+                     billing: BillingService = Depends(get_billing)):
+    return _invoice_out(billing.generate(client_id, body.month, actor.email))
+
+
+@app.post("/invoices/{invoice_id}/{action}")
+def invoice_action(invoice_id: str, action: str, body: s.InvoicePayment | None = None,
+                   actor: User = Depends(platform_admin), billing: BillingService = Depends(get_billing)):
+    if action == "issue":
+        return _invoice_out(billing.issue(invoice_id, actor.email))
+    if action == "void":
+        return _invoice_out(billing.void(invoice_id, actor.email))
+    if action == "pay":
+        if body is None:
+            raise ServiceError("Enter the payment date and reference", field="reference")
+        return _invoice_out(billing.mark_paid(invoice_id, actor.email, body.paid_on, body.reference))
+    raise NotFound(f"Unknown action {action!r}")

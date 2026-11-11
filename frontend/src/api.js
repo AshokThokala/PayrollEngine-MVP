@@ -100,6 +100,14 @@ export const api = {
   updateEmployee: (clientId, code, body) => request('PUT', `/clients/${enc(clientId)}/employees/${enc(code)}`, body),
   viewAs: (clientId, code) => request('POST', `/clients/${enc(clientId)}/employees/${enc(code)}/view-as`),
   reportCatalog: () => request('GET', '/reports'),
+  onboarding: (clientId) => request('GET', `/clients/${enc(clientId)}/onboarding`),
+  onboardingOverview: () => request('GET', '/onboarding/clients'),
+  billingPlans: () => request('GET', '/billing/plans'),
+  billingOverview: () => request('GET', '/billing/overview'),
+  clientBilling: (clientId) => request('GET', `/clients/${enc(clientId)}/billing`),
+  setBillingPlan: (clientId, body) => request('PUT', `/clients/${enc(clientId)}/billing/plan`, body),
+  generateInvoice: (clientId, month) => request('POST', `/clients/${enc(clientId)}/invoices`, { month }),
+  invoiceAction: (invoiceId, action, body) => request('POST', `/invoices/${enc(invoiceId)}/${action}`, body),
   getReport: (clientId, key, params = {}) => {
     const q = new URLSearchParams(Object.entries(params).filter(([, v]) => v)).toString()
     return request('GET', `/clients/${enc(clientId)}/reports/${enc(key)}${q ? `?${q}` : ''}`)
