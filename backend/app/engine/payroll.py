@@ -8,7 +8,7 @@ from .models import Employee, Line, PayInputs, Payslip, SalaryStructure
 from .money import ZERO, paise
 from .rules import RuleBook, RuleNotFound
 from .statutory import compute_esi, compute_lwf, compute_pf, compute_pt, esi_covered
-from .tds import monthly_tds
+from .tds import AnnualSalary, compute_annual, monthly_from_annual
 from .wages import check_structure, statutory_wages
 
 LABELS = {
@@ -95,15 +95,25 @@ def compute_payslip(employee: Employee, structure: SalaryStructure,
             deductions.append(Line("lwf_employee", "Labour welfare fund", lwf_emp, lwf_rule.version))
             employer.append(Line("lwf_employer", "Employer LWF", lwf_er, lwf_rule.version))
 
-    # 6. TDS on salary.
-    if employee.tax_regime != "new":
-        warnings.append("Old tax regime not supported yet; TDS not calculated")
-    else:
-        tax_rule = rules.central("income_tax_new_regime", on)
-        tds = monthly_tds(gross, inputs.fy_month_index, inputs.ytd_taxable_gross,
-                          inputs.ytd_tds, tax_rule)
-        if tds:
-            deductions.append(Line("tds", "Income tax (TDS)", tds, tax_rule.version))
+    # 6. TDS on salary (Income-tax Act 2025 s.392): project the year, tax it, spread the rest.
+    regime = employee.tax_regime if employee.tax_regime in ("new", "old") else "new"
+    tax_rule = rules.central(f"income_tax_{regime}_regime", on)
+    months_left = 12 - inputs.fy_month_index + 1
+    this_month = {line.code: line.amount for line in deductions}
+    basic_da = sum((earned.get(k, ZERO) for k in ("basic", "da")), ZERO)
+    annual = AnnualSalary(
+        gross=inputs.ytd_taxable_gross + gross * months_left,
+        basic_da=inputs.ytd_basic_da + basic_da * months_left,
+        hra_received=inputs.ytd_hra + earned.get("hra", ZERO) * months_left,
+        professional_tax=inputs.ytd_pt + this_month.get("pt", ZERO) * months_left,
+        employee_pf=inputs.ytd_pf + this_month.get("pf_employee", ZERO) * months_left,
+    )
+    tax = compute_annual(regime, annual, tax_rule, age_group=employee.tax_age_group,
+                         metro=employee.metro_city, parents_senior=employee.parents_senior,
+                         declarations=employee.tax_declarations)
+    tds = monthly_from_annual(tax.tax, inputs.ytd_tds, months_left)
+    if tds:
+        deductions.append(Line("tds", f"Income tax (TDS, {regime} regime)", tds, tax_rule.version))
 
     # 7. Other deductions (advances, canteen, ...).
     for code, amt in inputs.other_deductions.items():

@@ -23,6 +23,14 @@ class ClientIn(BaseModel):
     pt_registration: str = ""
 
 
+class TaxProfile(BaseModel):
+    tax_regime: str = "new"
+    tax_age_group: str = "below_60"
+    metro_city: bool = False
+    parents_senior: bool = False
+    declarations: dict[str, Decimal | str | None] = {}
+
+
 class EmployeeIn(BaseModel):
     code: RequiredText
     name: RequiredText
@@ -34,6 +42,7 @@ class EmployeeIn(BaseModel):
     esi_covered: bool | None = None
     pt_applicable: bool = True
     lwf_applicable: bool = True
+    tax: TaxProfile | None = None
 
 
 class EmployeeOut(BaseModel):
@@ -43,6 +52,7 @@ class EmployeeOut(BaseModel):
     exited_on: date | None
     components: dict[str, Decimal]
     monthly_total: Decimal
+    tax: TaxProfile
 
 
 class EmployeeCreated(BaseModel):
@@ -140,3 +150,8 @@ class RuleOut(BaseModel):
 class RuleCreated(BaseModel):
     rule: RuleOut
     closed: RuleOut | None
+
+
+class RuleEdit(BaseModel):
+    params: dict
+    source: str = ""

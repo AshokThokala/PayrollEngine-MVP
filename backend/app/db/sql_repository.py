@@ -102,17 +102,20 @@ class SqlRepository:
             exists = c.one("SELECT 1 FROM employees WHERE client_id = ? AND code = ?",
                            record.client_id, e.code)
             values = (e.name, e.state, *(getattr(e, f) for f in EMPLOYEE_FLAGS),
-                      e.tax_regime, record.joined_on, record.exited_on)
+                      e.tax_regime, record.joined_on, record.exited_on, e.tax_age_group,
+                      e.metro_city, e.parents_senior, json.dumps(e.tax_declarations, default=str))
             if exists:
                 c.run("UPDATE employees SET name = ?, state = ?, pf_member = ?, eps_member = ?,"
                       " pf_on_full_wages = ?, esi_covered = ?, pt_applicable = ?,"
-                      " lwf_applicable = ?, tax_regime = ?, joined_on = ?, exited_on = ?"
+                      " lwf_applicable = ?, tax_regime = ?, joined_on = ?, exited_on = ?,"
+                      " tax_age_group = ?, metro_city = ?, parents_senior = ?, tax_declarations = ?"
                       " WHERE client_id = ? AND code = ?", *values, record.client_id, e.code)
             else:
                 c.run("INSERT INTO employees (name, state, pf_member, eps_member,"
                       " pf_on_full_wages, esi_covered, pt_applicable, lwf_applicable,"
-                      " tax_regime, joined_on, exited_on, client_id, code)"
-                      " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                      " tax_regime, joined_on, exited_on, tax_age_group, metro_city, parents_senior,"
+                      " tax_declarations, client_id, code)"
+                      " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                       *values, record.client_id, e.code)
             version, current = self._salary(c, record.client_id, e.code)
             if current != record.structure.components:
@@ -132,17 +135,22 @@ class SqlRepository:
         return version, {k: _dec(v) for k, v in rows}
 
     def _employee_from_row(self, c: "_Cursor", row) -> EmployeeRecord:
-        (client_id, code, name, state, *flags, regime, joined, exited) = row
+        (client_id, code, name, state, *flags, regime, joined, exited,
+         age_group, metro, parents_senior, declarations) = row
         flag_values = dict(zip(EMPLOYEE_FLAGS, map(_bool, flags)))
         _, components = self._salary(c, client_id, code)
         return EmployeeRecord(
             client_id,
-            Employee(code=code, name=name, state=state, tax_regime=regime, **flag_values),
+            Employee(code=code, name=name, state=state, tax_regime=regime, **flag_values,
+                     tax_age_group=age_group, metro_city=bool(metro),
+                     parents_senior=bool(parents_senior),
+                     tax_declarations=json.loads(declarations or "{}")),
             SalaryStructure(components), _date(joined), _date(exited),
         )
 
     _EMP_COLS = ("client_id, code, name, state, pf_member, eps_member, pf_on_full_wages,"
-                 " esi_covered, pt_applicable, lwf_applicable, tax_regime, joined_on, exited_on")
+                 " esi_covered, pt_applicable, lwf_applicable, tax_regime, joined_on, exited_on,"
+                 " tax_age_group, metro_city, parents_senior, tax_declarations")
 
     def get_employee(self, client_id: str, code: str) -> EmployeeRecord:
         with self._tx() as c:

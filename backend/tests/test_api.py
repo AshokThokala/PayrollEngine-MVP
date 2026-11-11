@@ -91,3 +91,24 @@ def test_rules_endpoints(client):
     assert r.status_code == 422
     labels = {e["label"] for e in r.json()["errors"]}
     assert labels == {"Payment due day", "Source"}
+
+
+def test_edit_rule_and_tax_profile(client):
+    pt = client.get("/rules", params={"scope": "TG", "category": "professional_tax"}).json()[0]
+    r = client.put(f"/rules/{pt['id']}", headers=OPS,
+                   json={"params": {**pt["params"], "due_day": 12}, "source": "Corrected"})
+    assert r.status_code == 200 and r.json()["params"]["due_day"] == 12
+    r = client.put(f"/rules/{pt['id']}", headers=OPS, json={"params": {**pt["params"], "due_day": 0}, "source": ""})
+    assert r.status_code == 422 and {e["label"] for e in r.json()["errors"]} == {"Due day (next month)", "Source"}
+    assert client.put("/rules/central:pf:1999-01-01", headers=OPS, json={"params": {}, "source": "x"}).status_code == 404
+
+    client.post("/clients", headers=OPS, json={"id": "acme", "legal_name": "Acme"})
+    r = client.post("/clients/acme/employees", headers=OPS, json={
+        "code": "E1", "name": "Ravi", "joined_on": "2026-04-01",
+        "components": {"basic": 50000, "hra": 20000, "special_allowance": 30000},
+        "tax": {"tax_regime": "old", "metro_city": True, "declarations": {"sec_80c": 150000}}})
+    assert r.status_code == 201 and r.json()["employee"]["tax"]["tax_regime"] == "old"
+    r = client.put("/clients/acme/employees/E1/tax", headers=OPS,
+                   json={"tax_regime": "old", "tax_age_group": "elder", "declarations": {"rent_paid": -5}})
+    assert r.status_code == 422
+    assert {e["label"] for e in r.json()["errors"]} == {"Age group", "Rent paid (₹/year)"}

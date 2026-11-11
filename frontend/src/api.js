@@ -62,6 +62,9 @@ export const api = {
   listRuleStates: () => request('GET', '/rules/states'),
   listRules: () => request('GET', '/rules'),
   createRule: (body) => request('POST', '/rules', body),
+  editRule: (ruleId, body) => request('PUT', `/rules/${enc(ruleId)}`, body),
+  updateTax: (clientId, code, body) =>
+    request('PUT', `/clients/${enc(clientId)}/employees/${enc(code)}/tax`, body),
   updateFiling: (filingId, status, challanRef) =>
     request('POST', `/filings/${enc(filingId)}`, { status, challan_ref: challanRef || null }),
 }

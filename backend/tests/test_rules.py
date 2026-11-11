@@ -19,9 +19,10 @@ def test_seed_loads_every_default_rule_once(repo):
     svc = service(repo)
     keys = {(r.scope, r.category) for r in repo.list_rules()}
     assert keys == {("central", "pf"), ("central", "esi"), ("central", "wage_code"),
-                    ("central", "income_tax_new_regime"), ("central", "filing_due_dates"),
+                    ("central", "income_tax_new_regime"), ("central", "income_tax_old_regime"),
+                    ("central", "filing_due_dates"),
                     ("TG", "professional_tax"), ("TG", "lwf")}
-    assert len(repo.list_rules()) == 8  # PF has two versions
+    assert len(repo.list_rules()) == 9  # PF has two versions
     assert svc.ensure_rules_seeded() == 0
     assert svc.rules.central("pf", date(2026, 10, 31))["wage_ceiling"] == 25000
 
@@ -88,3 +89,54 @@ def test_new_state_becomes_usable_without_lwf_rule(repo):
     svc.approve(run.id, "reviewer")
     pt_filing = next(f for f in svc.lock(run.id, "reviewer") if f.kind == "pt")
     assert pt_filing.due_on == date(2026, 11, 20)
+
+
+def test_seed_fills_new_fields_without_overwriting(repo):
+    svc = PayrollService(repo, clock=lambda: datetime(2026, 11, 1, tzinfo=timezone.utc))
+    svc.ensure_rules_seeded()
+    rule = next(r for r in repo.list_rules() if r.category == "income_tax_new_regime")
+    rule.params = {k: v for k, v in rule.params.items() if k != "surcharge_slabs"}
+    rule.params["cess_rate"] = 0.05  # a value someone edited
+    repo.save_rule(rule)
+    assert svc.ensure_rules_seeded() == 1
+    again = next(r for r in repo.list_rules() if r.category == "income_tax_new_regime")
+    assert again.params["surcharge_slabs"][-1]["rate"] == 0.25
+    assert again.params["cess_rate"] == 0.05
+
+
+def test_edit_rule_changes_values_and_is_audited(repo):
+    svc = service(repo)
+    rule = next(r for r in repo.list_rules() if r.scope == "TG" and r.category == "professional_tax")
+    params = {**rule.params, "due_day": 12}
+    edited = svc.edit_rule(rule.id, params, "Corrected due date", "ops1")
+    assert edited.params["due_day"] == 12 and edited.valid_from == rule.valid_from
+    assert svc.rules.state("TG", "professional_tax", date(2026, 10, 31))["due_day"] == 12
+    assert repo.audit_log()[-1].detail == "changed: due_day, source"
+    with pytest.raises(ServiceError) as exc:
+        svc.edit_rule(rule.id, {**params, "due_day": 0}, "x", "ops1")
+    assert "due_day" in exc.value.errors
+    with pytest.raises(LookupError):
+        svc.edit_rule("central:pf:1999-01-01", params, "x", "ops1")
+
+
+def test_tax_profile_saved_and_used(repo):
+    svc = service(repo)
+    svc.add_client(Client(id="acme", legal_name="Acme", state="TG"), "ops1")
+    svc.add_employee(EmployeeRecord("acme", Employee(code="E1", name="Ravi"),
+                                    SalaryStructure({"basic": 50000, "hra": 20000, "special_allowance": 30000}),
+                                    date(2026, 4, 1)), "ops1")
+    new = svc.create_draft("acme", date(2026, 4, 1), user="ops1")
+    assert new.slips["E1"].amount("tds") == 0  # new regime: taxable 11.25 lakh, fully rebated
+    svc.update_tax_profile("acme", "E1", "ops1", regime="old", age_group="below_60", metro_city=True,
+                           parents_senior=True, declarations={
+                               "rent_paid": 240000, "sec_80c": 100000, "sec_80ccd_1b": 50000,
+                               "sec_80d_self": 30000, "sec_80d_parents": 30000, "home_loan_interest": ""})
+    stored = repo.get_employee("acme", "E1").employee
+    assert stored.tax_regime == "old" and stored.metro_city and stored.parents_senior
+    assert set(stored.tax_declarations) == {"rent_paid", "sec_80c", "sec_80ccd_1b", "sec_80d_self", "sec_80d_parents"}
+    old = svc.create_draft("acme", date(2026, 4, 1), user="ops1")
+    assert old.slips["E1"].amount("tds") == 5261  # 63,128 for the year / 12
+    with pytest.raises(ServiceError) as exc:
+        svc.update_tax_profile("acme", "E1", "ops1", regime="mid", age_group="x", metro_city=False,
+                               parents_senior=False, declarations={"sec_80c": -1})
+    assert set(exc.value.errors) == {"tax_regime", "tax_age_group", "sec_80c"}
