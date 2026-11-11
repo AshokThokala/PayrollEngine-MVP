@@ -243,3 +243,33 @@ def test_onboarding_and_billing_api(client, ops, reviewer):
     paid = client.post(f"/invoices/{inv['id']}/pay", headers=ops, json={"paid_on": "2026-11-10", "reference": "UTR1"})
     assert paid.json()["status"] == "paid"
     assert client.get("/billing/overview", headers=ops).status_code == 200
+
+
+def test_employee_invite_and_onboarding_api(client, ops):
+    client.post("/clients", headers=ops, json={"id": "acme", "legal_name": "Acme", "state": "TG"})
+    client.post("/clients/acme/employees", headers=ops, json={
+        "code": "E1", "name": "Ravi", "joined_on": "2026-04-01", "components": {"basic": 30000}})
+    inv = client.post("/clients/acme/employees/E1/invite", headers=ops, json={"email": "ravi@acme.in"})
+    assert inv.status_code == 201 and inv.json()["path"].startswith("/invite/")
+    token = inv.json()["path"].split("/")[-1]
+    assert client.get(f"/invite/{token}").json()["employee_name"] == "Ravi"
+    r = client.post(f"/invite/{token}/accept", json={"name": "Ravi K", "password": "short"})
+    assert r.status_code == 409 and r.json()["errors"][0]["field"] == "password"
+    r = client.post(f"/invite/{token}/accept", json={"name": "Ravi K", "password": "Payroll123"})
+    assert r.status_code == 201
+    ravi = {"Authorization": f"Bearer {r.json()['token']}"}
+
+    r = client.put("/me/onboarding", headers=ravi, json={"phone": "123", "submit": True})
+    assert r.status_code == 409
+    labels = {e["field"]: e["label"] for e in r.json()["errors"]}
+    assert labels["phone"] == "Mobile number" and labels["account_number"] == "Bank account number"
+    good = {"phone": "9876543210", "date_of_birth": "1995-06-15", "address": "Road 1", "city": "Hyderabad",
+            "pincode": "500034", "emergency_name": "L", "emergency_phone": "9123456780", "bank_name": "HDFC",
+            "ifsc": "HDFC0001234", "pan": "ABCDE1234F", "account_number": "50100012345678", "submit": True}
+    assert client.put("/me/onboarding", headers=ravi, json=good).json()["status"] == "submitted"
+    rows = client.get("/clients/acme/employee-onboarding", headers=ops).json()
+    assert rows[0]["stage"] == "submitted"
+    assert client.get("/clients/acme/employees/E1/profile", headers=ravi).status_code == 403
+    assert client.get("/clients/acme/employees/E1/profile", headers=ops).json()["pan"] == "ABCDE1234F"
+    assert client.post("/clients/acme/employees/E1/profile/verify", headers=ops).json()["status"] == "verified"
+    assert client.get("/me/onboarding", headers=ravi).json()["status"] == "verified"

@@ -206,3 +206,44 @@ class Invoice:
     due_date: date | None = None
     paid_on: date | None = None
     payment_ref: str | None = None
+
+
+# --- employee invites and onboarding ---------------------------------------------------------
+
+@dataclass
+class Invite:
+    """A one-time link that lets an employee create their login. Only the token's hash is kept."""
+
+    id: str
+    client_id: str
+    employee_code: str
+    email: str
+    token_hash: str
+    created_by: str
+    created_at: datetime
+    expires_at: datetime
+    accepted_at: datetime | None = None
+    revoked: bool = False
+
+
+class ProfileStatus(str, enum.Enum):
+    DRAFT = "draft"
+    SUBMITTED = "submitted"
+    RETURNED = "returned"  # admin sent it back with a note
+    VERIFIED = "verified"
+
+
+@dataclass
+class EmployeeProfile:
+    """What an employee fills in when they join. pan_enc and account_enc are encrypted at rest."""
+
+    client_id: str
+    employee_code: str
+    status: ProfileStatus = ProfileStatus.DRAFT
+    details: dict = field(default_factory=dict)  # phone, dob, address, emergency contact, UAN, ESI IP, bank, IFSC
+    pan_enc: str | None = None
+    account_enc: str | None = None
+    submitted_at: datetime | None = None
+    verified_by: str | None = None
+    verified_at: datetime | None = None
+    note: str = ""

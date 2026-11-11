@@ -100,6 +100,17 @@ export const api = {
   updateEmployee: (clientId, code, body) => request('PUT', `/clients/${enc(clientId)}/employees/${enc(code)}`, body),
   viewAs: (clientId, code) => request('POST', `/clients/${enc(clientId)}/employees/${enc(code)}/view-as`),
   reportCatalog: () => request('GET', '/reports'),
+  inviteEmployee: (clientId, code, email) =>
+    request('POST', `/clients/${enc(clientId)}/employees/${enc(code)}/invite`, { email }),
+  revokeInvite: (inviteId) => request('POST', `/invites/${enc(inviteId)}/revoke`),
+  inviteDetails: (token) => request('GET', `/invite/${enc(token)}`),
+  acceptInvite: (token, body) => request('POST', `/invite/${enc(token)}/accept`, body),
+  employeeOnboarding: (clientId) => request('GET', `/clients/${enc(clientId)}/employee-onboarding`),
+  employeeProfile: (clientId, code) => request('GET', `/clients/${enc(clientId)}/employees/${enc(code)}/profile`),
+  reviewProfile: (clientId, code, decision, note = '') =>
+    request('POST', `/clients/${enc(clientId)}/employees/${enc(code)}/profile/${decision}`, { note }),
+  myOnboarding: () => request('GET', '/me/onboarding'),
+  saveMyOnboarding: (body) => request('PUT', '/me/onboarding', body),
   onboarding: (clientId) => request('GET', `/clients/${enc(clientId)}/onboarding`),
   onboardingOverview: () => request('GET', '/onboarding/clients'),
   billingPlans: () => request('GET', '/billing/plans'),

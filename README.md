@@ -44,6 +44,13 @@ A payroll run must be approved by a different admin from the one who calculated 
   the employee has no login yet.
 - **Reports**: salary register, statutory dues by month, payroll cost trend (with chart), compliance status and
   income tax summary - each with totals and *Download CSV*.
+- **Employee onboarding**: invite → register → onboard → verify. Pick an employee, enter their email and
+  *Make invite link*; copy the link (it works once, for 7 days; a new link cancels the old one) and send it yourself -
+  there is no email service yet. The employee opens `/invite/<token>`, sets a password and is logged in straight away.
+  In the portal they fill in *Joining details* in steps (contact and emergency contact; PAN, UAN, ESI IP; salary bank
+  account and IFSC), then submit. The admin checks the details and *Verifies* them or *Sends back* with a note.
+  PAN and account numbers are encrypted at rest (Fernet; key from `FIELD_ENCRYPTION_KEY`, or derived from
+  `SECRET_KEY` - keep it stable). Only a SHA-256 hash of each invite token is stored.
 - **Client onboarding**: a 7-step checklist per client (company details, statutory registrations, client admin
   login, billing plan, employees, salary structures, first locked payroll) with a progress bar and a *Go* button to
   the page that finishes each step. Platform admins also see every client, least complete first.
@@ -191,6 +198,8 @@ python -m pytest
 | `audit_events` | Append-only audit log (UPDATE/DELETE blocked on Postgres) |
 | `billing_plans` | One billing plan per client: plan, rates, billing email |
 | `invoices` | Monthly invoices: lines (JSON), GST split, number, status, payment reference |
+| `invites` | Employee invite links: email, token hash, expiry, used/cancelled |
+| `employee_profiles` | Joining details per employee; PAN and account number encrypted; draft/submitted/returned/verified |
 | `statutory_rules` | Compliance rules: one row per dated version (scope, category, valid_from/to, JSON values, source) |
 | `schema_migrations` | Applied migrations |
 
