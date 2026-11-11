@@ -440,3 +440,6 @@ table.compact-list .caret { display: inline-block; width: 12px; color: var(--mut
 table.clickable tbody tr.detail-row { cursor: default; }
 table.clickable tbody tr.detail-row td { background: #fafcfb; padding: 4px 12px 12px; }
 .detail-row .rule-version { margin-top: 10px; }
+.version-tabs { display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 0 12px; }
+.version-tabs button { font-size: 0.8rem; padding: 5px 10px; border-radius: 999px; }
+.version-tabs button.active { background: var(--brand); border-color: var(--brand); color: #fff; font-weight: 600; }
