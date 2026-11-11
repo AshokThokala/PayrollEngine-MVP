@@ -45,7 +45,7 @@ export default function App() {
     <div className="app">
       <header className="topbar">
         <div className="brand">
-          Tankha <span className="tagline">zero-penalty payroll</span>
+          ClearPay4U <span className="tagline">zero-penalty payroll</span>
         </div>
         <label className="field-inline">
           Client

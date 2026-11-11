@@ -1,4 +1,4 @@
-# Tankha — zero-penalty payroll
+# ClearPay4U — zero-penalty payroll
 
 Payroll and statutory compliance (PF, ESI, Professional Tax, LWF, TDS) for small Indian firms,
 run as software plus a done-for-you service. Launch state: **Telangana**.
