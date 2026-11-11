@@ -1,9 +1,6 @@
-import { Fragment, useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { api, today } from '../api.js'
 import InfoTip from '../components/InfoTip.jsx'
-
-const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
-const inr = new Intl.NumberFormat('en-IN')
 
 // ---- converting between stored values and what the form shows ----------------
 
@@ -44,24 +41,6 @@ function toParam(type, display) {
   }
 }
 
-function summary(type, value) {
-  if (value === undefined || value === null) return '—'
-  switch (type) {
-    case 'percent': return `${pct(value)}%`
-    case 'money': return `₹${inr.format(value)}`
-    case 'months': return value.map((m) => MONTHS[m - 1]).join(', ')
-    case 'text_list': return value.join(', ')
-    case 'amount_slabs':
-    case 'rate_slabs':
-      return value.map((s, i) => {
-        const v = type === 'rate_slabs' ? `${pct(s.rate)}%` : `₹${inr.format(s.amount)}`
-        if (s.upto === null) return `above ₹${inr.format(value[i - 1]?.upto ?? 0)}: ${v}`
-        return `up to ₹${inr.format(s.upto)}: ${v}`
-      }).join(' · ')
-    default: return String(value)
-  }
-}
-
 // ---- page ------------------------------------------------------------------------
 
 export default function RulesPage({ initialCategory }) {
@@ -78,7 +57,7 @@ export default function RulesPage({ initialCategory }) {
   const [message, setMessage] = useState(null)
   const [busy, setBusy] = useState(false)
   const [editing, setEditing] = useState(null) // a rule version being corrected
-  const [open, setOpen] = useState(null) // rule group shown with its versions
+  const [open, setOpen] = useState(null) // rule group (category|scope) open in the editor
 
   const load = useCallback(async () => {
     try {
@@ -131,6 +110,42 @@ export default function RulesPage({ initialCategory }) {
     setValidFrom(today())
   }
 
+  // Click a rule: open its version in force (or latest) in the editor, like clients and employees.
+  const openRule = (key, version) => {
+    setOpen(key)
+    startEdit(version)
+  }
+
+  // New version of the open rule from a later date, pre-filled from its latest version.
+  const addVersionOfOpen = () => {
+    cancelEdit()
+    setMessage(null)
+  }
+
+  const startAdd = () => {
+    setOpen(null)
+    cancelEdit()
+    setMessage(null)
+  }
+
+  const openVersions = useMemo(
+    () => (open ? rules.filter((r) => `${r.category}|${r.scope}` === open).sort((a, b) => b.valid_from.localeCompare(a.valid_from)) : []),
+    [rules, open],
+  )
+
+  // Opened from the Tax rules page on a category: open that rule once rules have loaded.
+  const opened = useRef(false)
+  useEffect(() => {
+    if (!initialCategory || opened.current || rules.length === 0) return
+    const versions = rules.filter((r) => r.category === initialCategory && r.scope === 'central')
+      .sort((a, b) => b.valid_from.localeCompare(a.valid_from))
+    if (versions.length) {
+      opened.current = true
+      openRule(`${initialCategory}|central`, versions.find((v) => !v.valid_to) || versions[0])
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialCategory, rules])
+
   const chooseCategory = (c) => {
     setCategory(c)
     const s = categories.find((x) => x.category === c)
@@ -150,11 +165,9 @@ export default function RulesPage({ initialCategory }) {
     spec.fields.forEach((f) => { params[f.key] = toParam(f.type, values[f.key]) })
     try {
       if (editing) {
-        await api.editRule(editing.id, { params, source })
+        const updated = await api.editRule(editing.id, { params, source })
         setMessage({ kind: 'ok', text: `Updated ${spec.label} version from ${editing.valid_from}. Drafts calculated from now on use the new values; locked runs keep theirs.` })
-        setEditing(null)
-        setSource('')
-        setValidFrom(today())
+        setEditing(updated)
         load()
         return
       }
@@ -165,7 +178,11 @@ export default function RulesPage({ initialCategory }) {
           + (res.closed ? ` The previous version (from ${res.closed.valid_from}) now ends on ${res.closed.valid_to}.` : ''),
       })
       setSource('')
-      load()
+      await load()
+      setOpen(`${res.rule.category}|${res.rule.scope}`)
+      setEditing(res.rule)
+      setValidFrom(res.rule.valid_from)
+      setSource(res.rule.source)
     } catch (err) {
       setFieldErrors(err.fieldErrors || {})
       setMessage({ kind: 'error', text: err.message })
@@ -194,50 +211,29 @@ export default function RulesPage({ initialCategory }) {
       <section className="card">
         <div className="run-head">
           <h2>Compliance rules</h2>
+          <div className="actions">
+            <button className="primary" onClick={startAdd}>+ Add rule version</button>
           <select value={filter} onChange={(e) => setFilter(e.target.value)}>
             <option value="all">All</option>
             {scopes.map((s) => <option key={s} value={s}>{s === 'central' ? 'Central' : stateName(s)}</option>)}
           </select>
+          </div>
         </div>
         <div className="table-wrap">
           <table className="clickable compact-list">
             <thead><tr><th>Rule</th><th>Scope</th><th>In force since</th><th className="num">Versions</th></tr></thead>
             <tbody>
               {grouped.map(({ key, versions }) => {
-                const cat = categories.find((c) => c.category === versions[0].category)
                 const current = versions.find((v) => !v.valid_to) || versions[0]
-                const isOpen = open === key
                 return (
-                  <Fragment key={key}>
-                    <tr className={isOpen ? 'selected' : undefined} tabIndex={0}
-                        onClick={() => setOpen(isOpen ? null : key)}
-                        onKeyDown={(e) => e.key === 'Enter' && setOpen(isOpen ? null : key)}>
-                      <td><span className="caret" aria-hidden="true">{isOpen ? '▾' : '▸'}</span> {versions[0].category_label}</td>
-                      <td>{versions[0].scope === 'central' ? 'Central' : stateName(versions[0].scope)}</td>
-                      <td>{current.valid_from}</td>
-                      <td className="num">{versions.length}</td>
-                    </tr>
-                    {isOpen && (
-                      <tr className="detail-row">
-                        <td colSpan={4}>
-                          {versions.map((r) => (
-                            <div key={r.id} className={r.valid_to ? 'rule-version dim' : 'rule-version'}>
-                              <div className="rule-dates">
-                                {r.valid_from} → {r.valid_to || <span className="tag locked">in force</span>}
-                                {' '}<button type="button" className="link" onClick={() => startEdit(r)}>Edit</button>
-                              </div>
-                              <ul className="rule-values">
-                                {(cat?.fields || []).map((f) => (
-                                  <li key={f.key}><span className="muted">{f.label}:</span> {summary(f.type, r.params[f.key])}</li>
-                                ))}
-                              </ul>
-                              <div className="muted small">Source: {r.source || '—'} · added by {r.created_by}</div>
-                            </div>
-                          ))}
-                        </td>
-                      </tr>
-                    )}
-                  </Fragment>
+                  <tr key={key} className={open === key ? 'selected' : undefined} tabIndex={0}
+                      onClick={() => openRule(key, current)}
+                      onKeyDown={(e) => e.key === 'Enter' && openRule(key, current)}>
+                    <td>{versions[0].category_label}</td>
+                    <td>{versions[0].scope === 'central' ? 'Central' : stateName(versions[0].scope)}</td>
+                    <td>{current.valid_from}</td>
+                    <td className="num">{versions.length}</td>
+                  </tr>
                 )
               })}
             </tbody>
@@ -246,19 +242,31 @@ export default function RulesPage({ initialCategory }) {
       </section>
 
       <section className="card allow-overflow">
-        <h2>{editing ? 'Edit rule version' : 'Add rule version'}</h2>
-        {editing && (
-          <div className="banner warn">
-            Correcting the version that starts {editing.valid_from}. Use this to fix a mistake.
-            For a change in the law from a new date, add a new version instead.
-            {' '}<button type="button" className="link" onClick={cancelEdit}>Cancel editing</button>
+        <div className="run-head">
+          <h2>{editing ? editing.category_label || spec?.label : open ? `New version: ${spec?.label || ''}` : 'Add rule version'}</h2>
+          {open && <button onClick={() => { setOpen(null); cancelEdit(); setMessage(null) }}>Close</button>}
+        </div>
+        {open && openVersions.length > 0 && (
+          <div className="version-tabs" role="tablist" aria-label="Versions">
+            {openVersions.map((v) => (
+              <button key={v.id} role="tab" aria-selected={editing?.id === v.id}
+                className={editing?.id === v.id ? 'active' : ''} onClick={() => startEdit(v)}>
+                {v.valid_from}{v.valid_to ? '' : ' · in force'}
+              </button>
+            ))}
+            <button role="tab" aria-selected={!editing} className={!editing ? 'active' : ''} onClick={addVersionOfOpen}>+ New version</button>
           </div>
+        )}
+        {editing && (
+          <p className="muted small">
+            Editing corrects this version (from {editing.valid_from}). For a change in the law from a new date, use <em>+ New version</em>.
+          </p>
         )}
         {message && <div className={`banner ${message.kind}`}>{message.text}</div>}
         {spec && (
           <form onSubmit={submit} className="form">
             <label>Rule type
-              <select value={category} onChange={(e) => chooseCategory(e.target.value)} disabled={!!editing}>
+              <select value={category} onChange={(e) => chooseCategory(e.target.value)} disabled={!!editing || !!open}>
                 {categories.map((c) => <option key={c.category} value={c.category}>{c.label}</option>)}
               </select>
             </label>
@@ -267,7 +275,7 @@ export default function RulesPage({ initialCategory }) {
                 {spec.scope === 'central' ? (
                   <input value="All India (central)" disabled />
                 ) : (
-                  <select value={scope} onChange={(e) => setScope(e.target.value)} disabled={!!editing}>
+                  <select value={scope} onChange={(e) => setScope(e.target.value)} disabled={!!editing || !!open}>
                     {states.map((s) => <option key={s.code} value={s.code}>{s.name}{s.supported ? '' : ' (no rules yet)'}</option>)}
                   </select>
                 )}

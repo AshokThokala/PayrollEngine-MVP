@@ -76,10 +76,10 @@ A payroll run must be approved by a different admin from the one who calculated 
    A different admin approves it, then *Lock run* freezes it and employees can see their payslips.
 4. **Compliance calendar** - locking creates PF, ESI, TDS, PT, LWF and Form 24Q items with due dates.
    Enter the challan reference and mark them paid or filed. Overdue items are highlighted.
-5. **Compliance rules** - every statutory rule with its dated versions. *Add rule version* to change a rate,
-   slab or due date from a given date (the previous version ends the day before), or add Professional Tax /
-   LWF rules for a new state so clients can be created there. *Edit* on any version corrects its values or
-   source (dates stay; recorded in the audit log).
+5. **Compliance rules** - one row per rule (scope, in force since, versions). Click a rule to open it in the editor
+   on its version in force: change values or source to correct it, switch to another version with the version tabs, or
+   *+ New version* to change it from a later date (the previous version ends the day before). *+ Add rule version*
+   adds any rule, including Professional Tax / LWF for a new state so clients can be created there.
 6. **Income tax** - on Employees, *Edit* in the Tax column sets the regime (new is default, or old), age group
    and old-regime declarations (rent, 80C, 80CCD(1B), 80D, home loan interest). Monthly TDS projects the year,
    applies slabs, rebate, surcharge with marginal relief and 4% cess, and spreads the rest over the months left.
