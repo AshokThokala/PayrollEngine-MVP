@@ -44,7 +44,9 @@ export default function App() {
   return (
     <div className="app">
       <header className="topbar">
-        <div className="brand">Payroll + Compliance</div>
+        <div className="brand">
+          Tankha <span className="tagline">zero-penalty payroll</span>
+        </div>
         <label className="field-inline">
           Client
           <select value={clientId} onChange={(e) => setClientId(e.target.value)}>
