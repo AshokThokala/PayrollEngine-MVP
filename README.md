@@ -26,12 +26,21 @@ docker compose down               # stop (data is kept)
 docker compose down -v            # stop and DELETE all data
 ```
 
+### Logging in
+| Who | How they get in | What they can do |
+| --- | --- | --- |
+| **Platform admin** (your service team) | First one is created from `ADMIN_EMAIL` / `ADMIN_PASSWORD` (Docker default: `admin@clearpay4u.local` / `ChangeMe123` - change it) | Every client, compliance rules, all users |
+| **Client admin** | *Sign up a business* on the login page | Their own client: employees, payroll runs, filings, approving employee accounts |
+| **Employee** | *I'm an employee* with the client ID and their employee code; their employer approves the account | Their own profile, final (locked) payslips and tax declarations |
+
+Passwords are hashed with scrypt; logins last 12 hours. Set `SECRET_KEY` (see `backend/.env.example`).
+A payroll run must be approved by a different admin from the one who calculated it.
+
 ### Using the UI
 1. **Clients** - add a client firm. Only states that have compliance rules can be chosen.
 2. **Employees** - add employees with their monthly salary split; you are warned if basic + DA is under 50%.
 3. **Payroll runs** - pick a month and *Calculate draft*. Open payslips to see every line.
-   To approve, change **Acting as** (top right) to a different name - the preparer cannot approve.
-   Then *Lock run* to freeze it.
+   A different admin approves it, then *Lock run* freezes it and employees can see their payslips.
 4. **Compliance calendar** - locking creates PF, ESI, TDS, PT, LWF and Form 24Q items with due dates.
    Enter the challan reference and mark them paid or filed. Overdue items are highlighted.
 5. **Compliance rules** - every statutory rule with its dated versions. *Add rule version* to change a rate,
@@ -54,7 +63,6 @@ docker compose down -v            # stop and DELETE all data
 
 Not yet covered: perquisites, employer NPS (80CCD(2)), income from other sources or a previous employer.
 
-"Acting as" is a placeholder for real login; it is recorded in the audit log.
 
 ## Frontend development (without Docker)
 ```
@@ -91,7 +99,7 @@ python -m pytest                       # engine, service and API tests
 uvicorn app.api.main:app --reload      # API docs at http://localhost:8000/docs
 ```
 
-Every write request needs an `X-User` header (placeholder until real login).
+Every API call except login, sign-up and `/rules/states` needs `Authorization: Bearer <token>` from `POST /auth/login`.
 A run must be approved by a different user from the one who prepared it.
 
 ## Local PostgreSQL

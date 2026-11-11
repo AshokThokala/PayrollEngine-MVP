@@ -81,9 +81,12 @@ jobs:
           sleep 2
         done
         curl -fs http://localhost:8080/ | grep -q '<div id="root">'
-        curl -fs -X POST http://localhost:8080/api/clients -H 'Content-Type: application/json' -H 'X-User: ci' \
-          -d '{"id":"ci-test","legal_name":"CI Test","state":"TG"}'
-        curl -fs http://localhost:8080/api/clients | grep -q ci-test
+        TOKEN=$(curl -fs -X POST http://localhost:8080/api/auth/login -H 'Content-Type: application/json' \
+          -d '{"email":"admin@clearpay4u.local","password":"ChangeMe123"}' | python3 -c 'import sys,json; print(json.load(sys.stdin)["token"])')
+        test "$(curl -s -o /dev/null -w '%{http_code}' http://localhost:8080/api/clients)" = "401"
+        curl -fs -X POST http://localhost:8080/api/clients -H 'Content-Type: application/json' \
+          -H "Authorization: Bearer $TOKEN" -d '{"id":"ci-test","legal_name":"CI Test","state":"TG"}'
+        curl -fs http://localhost:8080/api/clients -H "Authorization: Bearer $TOKEN" | grep -q ci-test
         echo "Stack is up and data is stored in Postgres"
     - name: Logs on failure
       if: failure()

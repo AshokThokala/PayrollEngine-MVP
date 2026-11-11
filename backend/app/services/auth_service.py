@@ -1,0 +1,161 @@
+"""Sign-up, login, approvals and what each role may see.
+
+Roles
+  admin, no client      platform admin (payroll service team): every client, rules
+  admin, with client    client admin: that client only
+  employee              one employee: own profile, payslips and tax declarations
+"""
+from __future__ import annotations
+
+import uuid
+
+from .. import auth
+from ..domain import Client, PayrollRun, Role, RunStatus, User, UserStatus
+from ..engine.models import Payslip
+from .payroll_service import PayrollService, ServiceError
+
+WRONG_LOGIN = "Email or password is incorrect"
+
+
+class AccessDenied(PermissionError):
+    pass
+
+
+class AuthService:
+    def __init__(self, payroll: PayrollService):
+        self.payroll = payroll
+        self.repo = payroll.repo
+
+    # --- helpers -------------------------------------------------------------------
+    def _new_user(self, *, email: str, name: str, password: str, role: Role,
+                  status: UserStatus, client_id: str | None = None,
+                  employee_code: str | None = None) -> User:
+        errors = {}
+        email = email.strip().lower()
+        if not auth.EMAIL.match(email):
+            errors["email"] = "Enter a valid email address"
+        elif self.repo.find_user_by_email(email):
+            errors["email"] = "An account with this email already exists; log in instead"
+        if not name.strip():
+            errors["name"] = "This field is required"
+        problem = auth.password_problem(password)
+        if problem:
+            errors["password"] = problem
+        if errors:
+            raise ServiceError("Check the highlighted fields", errors=errors)
+        return User(id=uuid.uuid4().hex, email=email, name=name.strip(), role=role,
+                    password_hash=auth.hash_password(password), status=status,
+                    client_id=client_id, employee_code=employee_code,
+                    created_at=self.payroll.clock())
+
+    # --- accounts ----------------------------------------------------------------------
+    def create_platform_admin(self, email: str, password: str, name: str = "Platform admin") -> User:
+        user = self._new_user(email=email, name=name, password=password, role=Role.ADMIN,
+                              status=UserStatus.ACTIVE)
+        self.repo.save_user(user)
+        self.payroll._audit(user.email, "user.create", f"user/{user.id}", "platform admin")
+        return user
+
+    def ensure_bootstrap_admin(self, email: str | None, password: str | None) -> User | None:
+        """Create the first platform admin from ADMIN_EMAIL / ADMIN_PASSWORD if there are no users."""
+        if not email or not password or self.repo.list_users():
+            return None
+        return self.create_platform_admin(email, password)
+
+    def signup_client(self, client: Client, name: str, email: str, password: str) -> User:
+        """A business signs up: creates the client and its first admin login."""
+        user = self._new_user(email=email, name=name, password=password, role=Role.ADMIN,
+                              status=UserStatus.ACTIVE, client_id=client.id)
+        self.payroll.add_client(client, user=user.email)
+        self.repo.save_user(user)
+        self.payroll._audit(user.email, "user.signup", f"user/{user.id}", f"client admin for {client.id}")
+        return user
+
+    def signup_employee(self, client_id: str, employee_code: str, name: str, email: str,
+                        password: str) -> User:
+        """An employee signs up; the account stays pending until their employer approves it."""
+        try:
+            self.payroll.repo.get_client(client_id)
+        except LookupError:
+            raise ServiceError("No client with this ID; check it with your employer", field="client_id") from None
+        try:
+            record = self.repo.get_employee(client_id, employee_code)
+        except LookupError:
+            raise ServiceError("No employee with this code at this client", field="employee_code") from None
+        if record.exited_on:
+            raise ServiceError("This employee has left the client", field="employee_code")
+        if any(u.employee_code == employee_code for u in self.repo.list_users(client_id)):
+            raise ServiceError("This employee already has an account", field="employee_code")
+        user = self._new_user(email=email, name=name, password=password, role=Role.EMPLOYEE,
+                              status=UserStatus.PENDING, client_id=client_id,
+                              employee_code=employee_code)
+        self.repo.save_user(user)
+        self.payroll._audit(user.email, "user.signup", f"user/{user.id}",
+                            f"employee {client_id}/{employee_code}, pending approval")
+        return user
+
+    def login(self, email: str, password: str) -> tuple[User, str]:
+        user = self.repo.find_user_by_email(email or "")
+        if user is None or not auth.verify_password(password or "", user.password_hash):
+            raise ServiceError(WRONG_LOGIN)
+        if user.status == UserStatus.PENDING:
+            raise ServiceError("Your account is waiting for approval from your employer")
+        if user.status == UserStatus.DISABLED:
+            raise ServiceError("This account is disabled; contact your employer")
+        self.payroll._audit(user.email, "user.login", f"user/{user.id}")
+        return user, auth.make_token(user.id)
+
+    def user_from_token(self, token: str | None) -> User | None:
+        uid = auth.read_token(token) if token else None
+        if uid is None:
+            return None
+        try:
+            user = self.repo.get_user(uid)
+        except LookupError:
+            return None
+        return user if user.status == UserStatus.ACTIVE else None
+
+    # --- admin actions --------------------------------------------------------------
+    def check_client(self, actor: User, client_id: str) -> None:
+        if not actor.can_manage(client_id):
+            raise AccessDenied("You don't have access to this client")
+
+    def list_users(self, actor: User, client_id: str | None = None) -> list[User]:
+        if actor.role != Role.ADMIN:
+            raise AccessDenied("Admins only")
+        if not actor.is_platform_admin:
+            client_id = actor.client_id
+        return self.repo.list_users(client_id)
+
+    def set_status(self, actor: User, user_id: str, status: UserStatus) -> User:
+        target = self.repo.get_user(user_id)
+        if target.id == actor.id:
+            raise ServiceError("You can't change your own account status")
+        if target.client_id is None and not actor.is_platform_admin:
+            raise AccessDenied("Only platform admins can change platform admins")
+        if target.client_id is not None:
+            self.check_client(actor, target.client_id)
+        target.status = status
+        self.repo.save_user(target)
+        self.payroll._audit(actor.email, f"user.{status.value}", f"user/{target.id}", target.email)
+        return target
+
+    # --- employee self-service -----------------------------------------------------------
+    def _own(self, actor: User) -> tuple[str, str]:
+        if actor.role != Role.EMPLOYEE:
+            raise AccessDenied("Employees only")
+        return actor.client_id, actor.employee_code
+
+    def my_record(self, actor: User):
+        client_id, code = self._own(actor)
+        return self.repo.get_client(client_id), self.repo.get_employee(client_id, code)
+
+    def my_payslips(self, actor: User) -> list[tuple[PayrollRun, Payslip]]:
+        """Payslips from locked runs only - drafts are not final and are never shown."""
+        client_id, code = self._own(actor)
+        runs = [r for r in self.repo.list_runs(client_id) if r.status == RunStatus.LOCKED and code in r.slips]
+        return [(r, r.slips[code]) for r in sorted(runs, key=lambda r: r.period, reverse=True)]
+
+    def update_my_tax(self, actor: User, **profile):
+        client_id, code = self._own(actor)
+        return self.payroll.update_tax_profile(client_id, code, actor.email, **profile)

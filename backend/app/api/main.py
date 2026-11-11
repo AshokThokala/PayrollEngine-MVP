@@ -2,11 +2,14 @@
 
 Run locally:  uvicorn app.api.main:app --reload   (from backend/)
 
-Auth is a placeholder for the MVP: the caller's name comes from the
-``X-User`` header. Storage: PostgreSQL when DATABASE_URL is set, otherwise in memory.
+Login: POST /auth/login returns a token; send it as "Authorization: Bearer <token>".
+Roles: platform admin (all clients, rules), client admin (own client), employee (own data).
+The first platform admin is created from ADMIN_EMAIL / ADMIN_PASSWORD when there are no users.
+Storage: PostgreSQL when DATABASE_URL is set, otherwise in memory.
 """
 from __future__ import annotations
 
+import os
 from datetime import date
 from functools import lru_cache
 
@@ -14,12 +17,12 @@ from fastapi import Depends, FastAPI, Header, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
-from ..domain import Client, EmployeeRecord, FilingStatus, PayrollRun
+from ..domain import Client, EmployeeRecord, FilingStatus, PayrollRun, Role, User, UserStatus
 from .. import rule_schemas
 from ..engine import Employee, SalaryStructure
 from ..db import make_repository
 from ..repository import NotFound
-from ..services import MonthInput, PayrollService, ServiceError
+from ..services import AccessDenied, AuthService, MonthInput, PayrollService, ServiceError
 from ..services.compliance import overdue
 from . import errors
 from . import schemas as s
@@ -35,8 +38,52 @@ def get_service() -> PayrollService:
     return svc
 
 
-def current_user(x_user: str = Header(..., description="Placeholder auth")) -> str:
-    return x_user
+@lru_cache
+def get_auth() -> AuthService:
+    auth = AuthService(get_service())
+    auth.ensure_bootstrap_admin(os.environ.get("ADMIN_EMAIL"), os.environ.get("ADMIN_PASSWORD"))
+    return auth
+
+
+class NotLoggedIn(Exception):
+    pass
+
+
+def current_user(authorization: str | None = Header(None),
+                 auth: AuthService = Depends(get_auth)) -> User:
+    token = authorization.removeprefix("Bearer ").strip() if authorization else None
+    user = auth.user_from_token(token)
+    if user is None:
+        raise NotLoggedIn()
+    return user
+
+
+def admin_user(user: User = Depends(current_user)) -> User:
+    if user.role != Role.ADMIN:
+        raise AccessDenied("Admins only")
+    return user
+
+
+def platform_admin(user: User = Depends(admin_user)) -> User:
+    if not user.is_platform_admin:
+        raise AccessDenied("Only the payroll service team can do this")
+    return user
+
+
+def employee_user(user: User = Depends(current_user)) -> User:
+    if user.role != Role.EMPLOYEE:
+        raise AccessDenied("Employees only")
+    return user
+
+
+@app.exception_handler(NotLoggedIn)
+async def _not_logged_in(_: Request, exc: NotLoggedIn):
+    return JSONResponse(status_code=401, content=errors.from_service("Please log in", None))
+
+
+@app.exception_handler(AccessDenied)
+async def _forbidden(_: Request, exc: AccessDenied):
+    return JSONResponse(status_code=403, content=errors.from_service(str(exc), None))
 
 
 @app.exception_handler(NotFound)
@@ -105,10 +152,10 @@ def health():
 
 
 @app.post("/clients", status_code=201)
-def create_client(body: s.ClientIn, user: str = Depends(current_user),
+def create_client(body: s.ClientIn, user: User = Depends(platform_admin),
                   svc: PayrollService = Depends(get_service)):
     try:
-        svc.add_client(Client(**body.model_dump()), user)
+        svc.add_client(Client(**body.model_dump()), user.email)
     except ServiceError:
         raise
     except ValueError as exc:  # storage-level duplicate (e.g. two requests at once)
@@ -117,13 +164,15 @@ def create_client(body: s.ClientIn, user: str = Depends(current_user),
 
 
 @app.get("/clients")
-def list_clients(svc: PayrollService = Depends(get_service)):
-    return [c.__dict__ for c in svc.repo.list_clients()]
+def list_clients(user: User = Depends(admin_user), svc: PayrollService = Depends(get_service)):
+    return [c.__dict__ for c in svc.repo.list_clients() if user.can_manage(c.id)]
 
 
 @app.post("/clients/{client_id}/employees", status_code=201, response_model=s.EmployeeCreated)
-def add_employee(client_id: str, body: s.EmployeeIn, user: str = Depends(current_user),
-                 svc: PayrollService = Depends(get_service)):
+def add_employee(client_id: str, body: s.EmployeeIn, actor: User = Depends(admin_user),
+                 svc: PayrollService = Depends(get_service), auth: AuthService = Depends(get_auth)):
+    auth.check_client(actor, client_id)
+    user = actor.email
     flags = body.model_dump(include={"pf_member", "eps_member", "pf_on_full_wages",
                                      "esi_covered", "pt_applicable", "lwf_applicable"})
     record = EmployeeRecord(client_id, Employee(code=body.code, name=body.name, **flags),
@@ -139,16 +188,20 @@ def add_employee(client_id: str, body: s.EmployeeIn, user: str = Depends(current
 
 
 @app.get("/clients/{client_id}/employees", response_model=list[s.EmployeeOut])
-def list_employees(client_id: str, svc: PayrollService = Depends(get_service)):
+def list_employees(client_id: str, actor: User = Depends(admin_user),
+                   svc: PayrollService = Depends(get_service), auth: AuthService = Depends(get_auth)):
+    auth.check_client(actor, client_id)
     svc.repo.get_client(client_id)
     return [_employee_out(r) for r in svc.repo.list_employees(client_id)]
 
 
 @app.put("/clients/{client_id}/employees/{code}/tax", response_model=s.EmployeeOut)
 def update_tax_profile(client_id: str, code: str, body: s.TaxProfile,
-                       user: str = Depends(current_user), svc: PayrollService = Depends(get_service)):
+                       actor: User = Depends(admin_user), svc: PayrollService = Depends(get_service),
+                       auth: AuthService = Depends(get_auth)):
     """Regime choice and old-regime declarations used for monthly TDS."""
-    record = svc.update_tax_profile(client_id, code, user, regime=body.tax_regime,
+    auth.check_client(actor, client_id)
+    record = svc.update_tax_profile(client_id, code, actor.email, regime=body.tax_regime,
                                     age_group=body.tax_age_group, metro_city=body.metro_city,
                                     parents_senior=body.parents_senior,
                                     declarations=body.declarations)
@@ -157,43 +210,55 @@ def update_tax_profile(client_id: str, code: str, body: s.TaxProfile,
 
 @app.post("/clients/{client_id}/employees/{code}/exit", status_code=204)
 def exit_employee(client_id: str, code: str, body: s.ExitIn,
-                  user: str = Depends(current_user), svc: PayrollService = Depends(get_service)):
-    svc.exit_employee(client_id, code, body.exit_on, user)
+                  actor: User = Depends(admin_user), svc: PayrollService = Depends(get_service),
+                  auth: AuthService = Depends(get_auth)):
+    auth.check_client(actor, client_id)
+    svc.exit_employee(client_id, code, body.exit_on, actor.email)
 
 
 @app.post("/clients/{client_id}/runs", status_code=201, response_model=s.RunOut)
-def create_run(client_id: str, body: s.RunIn, user: str = Depends(current_user),
-               svc: PayrollService = Depends(get_service)):
+def create_run(client_id: str, body: s.RunIn, actor: User = Depends(admin_user),
+               svc: PayrollService = Depends(get_service), auth: AuthService = Depends(get_auth)):
+    auth.check_client(actor, client_id)
     inputs = {code: MonthInput(**mi.model_dump()) for code, mi in body.inputs.items()}
-    return _run_out(svc.create_draft(client_id, body.period, user, inputs))
+    return _run_out(svc.create_draft(client_id, body.period, actor.email, inputs))
 
 
 @app.get("/clients/{client_id}/runs", response_model=list[s.RunOut])
-def list_runs(client_id: str, svc: PayrollService = Depends(get_service)):
+def list_runs(client_id: str, actor: User = Depends(admin_user),
+              svc: PayrollService = Depends(get_service), auth: AuthService = Depends(get_auth)):
+    auth.check_client(actor, client_id)
     svc.repo.get_client(client_id)
     return [_run_out(r) for r in reversed(svc.repo.list_runs(client_id))]
 
 
 @app.get("/runs/{run_id}", response_model=s.RunOut)
-def get_run(run_id: str, svc: PayrollService = Depends(get_service)):
-    return _run_out(svc.repo.get_run(run_id))
+def get_run(run_id: str, actor: User = Depends(admin_user),
+            svc: PayrollService = Depends(get_service), auth: AuthService = Depends(get_auth)):
+    run = svc.repo.get_run(run_id)
+    auth.check_client(actor, run.client_id)
+    return _run_out(run)
 
 
 @app.post("/runs/{run_id}/approve", response_model=s.RunOut)
-def approve_run(run_id: str, user: str = Depends(current_user),
-                svc: PayrollService = Depends(get_service)):
-    return _run_out(svc.approve(run_id, user))
+def approve_run(run_id: str, actor: User = Depends(admin_user),
+                svc: PayrollService = Depends(get_service), auth: AuthService = Depends(get_auth)):
+    auth.check_client(actor, svc.repo.get_run(run_id).client_id)
+    return _run_out(svc.approve(run_id, actor.email))
 
 
 @app.post("/runs/{run_id}/lock", response_model=list[s.FilingOut])
-def lock_run(run_id: str, user: str = Depends(current_user),
-             svc: PayrollService = Depends(get_service)):
-    return [_filing_out(f) for f in svc.lock(run_id, user)]
+def lock_run(run_id: str, actor: User = Depends(admin_user),
+             svc: PayrollService = Depends(get_service), auth: AuthService = Depends(get_auth)):
+    auth.check_client(actor, svc.repo.get_run(run_id).client_id)
+    return [_filing_out(f) for f in svc.lock(run_id, actor.email)]
 
 
 @app.get("/filings", response_model=list[s.FilingOut])
 def list_filings(client_id: str | None = None, overdue_on: date | None = None,
-                 svc: PayrollService = Depends(get_service)):
+                 actor: User = Depends(admin_user), svc: PayrollService = Depends(get_service)):
+    if not actor.is_platform_admin:
+        client_id = actor.client_id  # client admins only ever see their own filings
     items = svc.repo.list_filings(client_id)
     if overdue_on:
         items = overdue(items, overdue_on)
@@ -201,8 +266,10 @@ def list_filings(client_id: str | None = None, overdue_on: date | None = None,
 
 
 @app.post("/filings/{filing_id}", response_model=s.FilingOut)
-def update_filing(filing_id: str, body: s.FilingUpdate, user: str = Depends(current_user),
-                  svc: PayrollService = Depends(get_service)):
+def update_filing(filing_id: str, body: s.FilingUpdate, actor: User = Depends(admin_user),
+                  svc: PayrollService = Depends(get_service), auth: AuthService = Depends(get_auth)):
+    auth.check_client(actor, svc.repo.get_filing(filing_id).client_id)
+    user = actor.email
     try:
         status = FilingStatus(body.status)
     except ValueError as exc:
@@ -236,17 +303,17 @@ def rule_states(svc: PayrollService = Depends(get_service)):
 
 @app.get("/rules", response_model=list[s.RuleOut])
 def list_rules(scope: str | None = None, category: str | None = None,
-               svc: PayrollService = Depends(get_service)):
+               actor: User = Depends(admin_user), svc: PayrollService = Depends(get_service)):
     return [_rule_out(r) for r in svc.repo.list_rules()
             if scope in (None, r.scope) and category in (None, r.category)]
 
 
 @app.post("/rules", status_code=201, response_model=s.RuleCreated)
-def create_rule(body: s.RuleIn, user: str = Depends(current_user),
+def create_rule(body: s.RuleIn, actor: User = Depends(platform_admin),
                 svc: PayrollService = Depends(get_service)):
     try:
         rule, closed = svc.add_rule(body.scope, body.category, body.valid_from, body.params,
-                                    body.source, user)
+                                    body.source, actor.email)
     except ServiceError as exc:
         exc.category = body.category
         raise
@@ -254,15 +321,93 @@ def create_rule(body: s.RuleIn, user: str = Depends(current_user),
 
 
 @app.put("/rules/{rule_id}", response_model=s.RuleOut)
-def edit_rule(rule_id: str, body: s.RuleEdit, user: str = Depends(current_user),
+def edit_rule(rule_id: str, body: s.RuleEdit, actor: User = Depends(platform_admin),
               svc: PayrollService = Depends(get_service)):
     """Correct the values or source of an existing version. Dates do not change."""
     category = rule_id.split(":")[1] if rule_id.count(":") == 2 else ""
     try:
-        rule = svc.edit_rule(rule_id, body.params, body.source, user)
+        rule = svc.edit_rule(rule_id, body.params, body.source, actor.email)
     except LookupError as exc:
         raise NotFound(str(exc)) from exc
     except ServiceError as exc:
         exc.category = category
         raise
     return _rule_out(rule)
+
+
+# --- login and sign-up ---------------------------------------------------------------
+
+def _user_out(u: User) -> s.UserOut:
+    return s.UserOut(id=u.id, email=u.email, name=u.name, role=u.role.value, status=u.status.value,
+                     client_id=u.client_id, employee_code=u.employee_code,
+                     is_platform_admin=u.is_platform_admin)
+
+
+@app.post("/auth/login", response_model=s.LoginOut)
+def login(body: s.LoginIn, auth: AuthService = Depends(get_auth)):
+    user, token = auth.login(body.email, body.password)
+    return s.LoginOut(token=token, user=_user_out(user))
+
+
+@app.post("/auth/signup/client", status_code=201, response_model=s.LoginOut)
+def signup_client(body: s.ClientSignupIn, auth: AuthService = Depends(get_auth)):
+    """A business signs up: creates the client and its admin login, then logs in."""
+    auth.signup_client(Client(**body.client.model_dump()), body.name, body.email, body.password)
+    user, token = auth.login(body.email, body.password)
+    return s.LoginOut(token=token, user=_user_out(user))
+
+
+@app.post("/auth/signup/employee", status_code=201, response_model=s.UserOut)
+def signup_employee(body: s.EmployeeSignupIn, auth: AuthService = Depends(get_auth)):
+    """An employee signs up; they can log in once their employer approves the account."""
+    return _user_out(auth.signup_employee(body.client_id, body.employee_code, body.name,
+                                          body.email, body.password))
+
+
+@app.get("/auth/me", response_model=s.UserOut)
+def me(user: User = Depends(current_user)):
+    return _user_out(user)
+
+
+# --- user management (admins) -------------------------------------------------------------
+
+@app.get("/users", response_model=list[s.UserOut])
+def list_users(client_id: str | None = None, actor: User = Depends(admin_user),
+               auth: AuthService = Depends(get_auth)):
+    return [_user_out(u) for u in auth.list_users(actor, client_id)]
+
+
+@app.post("/users/{user_id}/{action}", response_model=s.UserOut)
+def change_user(user_id: str, action: str, actor: User = Depends(admin_user),
+                auth: AuthService = Depends(get_auth)):
+    status = {"approve": UserStatus.ACTIVE, "enable": UserStatus.ACTIVE,
+              "disable": UserStatus.DISABLED}.get(action)
+    if status is None:
+        raise NotFound(f"Unknown action {action!r}")
+    return _user_out(auth.set_status(actor, user_id, status))
+
+
+# --- employee self-service --------------------------------------------------------------
+
+@app.get("/me/employee", response_model=s.MeOut)
+def my_employee(user: User = Depends(employee_user), auth: AuthService = Depends(get_auth)):
+    client, record = auth.my_record(user)
+    return s.MeOut(client_id=client.id, client_name=client.legal_name, employee=_employee_out(record))
+
+
+@app.get("/me/payslips", response_model=list[s.MyPayslipOut])
+def my_payslips(user: User = Depends(employee_user), auth: AuthService = Depends(get_auth)):
+    out = []
+    for run, slip in auth.my_payslips(user):
+        payslip = next(p for p in _run_out(run).slips if p.employee_code == slip.employee_code)
+        out.append(s.MyPayslipOut(run_id=run.id, period=run.period, payslip=payslip))
+    return out
+
+
+@app.put("/me/tax", response_model=s.EmployeeOut)
+def update_my_tax(body: s.TaxProfile, user: User = Depends(employee_user),
+                  auth: AuthService = Depends(get_auth)):
+    record = auth.update_my_tax(user, regime=body.tax_regime, age_group=body.tax_age_group,
+                                metro_city=body.metro_city, parents_senior=body.parents_senior,
+                                declarations=body.declarations)
+    return _employee_out(record)

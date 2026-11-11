@@ -1,5 +1,6 @@
 import { Fragment, useCallback, useEffect, useState } from 'react'
 import { api, money } from '../api.js'
+import PayslipView from '../components/PayslipView.jsx'
 
 function thisMonth() {
   return new Date().toISOString().slice(0, 7)
@@ -129,7 +130,7 @@ export default function RunsPage({ client, user }) {
               <div className="actions">
                 {selected.status === 'draft' && (
                   <button className="primary" disabled={busy || user === selected.prepared_by}
-                    title={user === selected.prepared_by ? 'Switch "Acting as" to a different person to approve' : ''}
+                    title={user === selected.prepared_by ? 'You prepared this run; a different admin must approve it' : ''}
                     onClick={() => act(() => api.approveRun(selected.id), 'Run approved.')}>
                     Approve
                   </button>
@@ -176,7 +177,7 @@ export default function RunsPage({ client, user }) {
                     </tr>
                     {open[s.employee_code] && (
                       <tr className="detail">
-                        <td colSpan={6}><Payslip slip={s} /></td>
+                        <td colSpan={6}><PayslipView slip={s} /></td>
                       </tr>
                     )}
                   </Fragment>
@@ -186,40 +187,6 @@ export default function RunsPage({ client, user }) {
           </>
         )}
       </section>
-    </div>
-  )
-}
-
-function Lines({ title, lines }) {
-  return (
-    <div>
-      <h4>{title}</h4>
-      {lines.length === 0 ? <p className="muted small">None</p> : (
-        <table className="compact">
-          <tbody>
-            {lines.map((l) => (
-              <tr key={l.code} title={l.rule || ''}>
-                <td>{l.label}</td>
-                <td className="num">{money(l.amount)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      )}
-    </div>
-  )
-}
-
-function Payslip({ slip }) {
-  return (
-    <div className="payslip">
-      <Lines title="Earnings" lines={slip.earnings} />
-      <Lines title="Deductions" lines={slip.deductions} />
-      <Lines title="Employer contributions" lines={slip.employer_contributions} />
-      <p className="muted small">
-        Statutory wages (Code on Wages): {money(slip.statutory_wages)}. Hover a line to see the rule version used.
-        {slip.warnings.length > 0 && ` Warnings: ${slip.warnings.join(' ')}`}
-      </p>
     </div>
   )
 }

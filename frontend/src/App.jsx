@@ -1,24 +1,50 @@
 import { useCallback, useEffect, useState } from 'react'
-import { api, getUser, setUser } from './api.js'
+import { api, loadSession, saveSession, whenLoggedOut } from './api.js'
+import AuthScreen from './pages/AuthScreen.jsx'
 import ClientsPage from './pages/ClientsPage.jsx'
 import EmployeesPage from './pages/EmployeesPage.jsx'
-import RunsPage from './pages/RunsPage.jsx'
+import EmployeePortal from './pages/EmployeePortal.jsx'
 import FilingsPage from './pages/FilingsPage.jsx'
 import RulesPage from './pages/RulesPage.jsx'
-
-const TABS = [
-  { id: 'clients', label: 'Clients' },
-  { id: 'employees', label: 'Employees', needsClient: true },
-  { id: 'runs', label: 'Payroll runs', needsClient: true },
-  { id: 'filings', label: 'Compliance calendar' },
-  { id: 'rules', label: 'Compliance rules' },
-]
+import RunsPage from './pages/RunsPage.jsx'
+import UsersPage from './pages/UsersPage.jsx'
 
 export default function App() {
+  const [session, setSession] = useState(() => loadSession())
+
+  const logout = useCallback(() => {
+    saveSession(null)
+    setSession(null)
+  }, [])
+
+  useEffect(() => {
+    whenLoggedOut(() => setSession(null))
+  }, [])
+
+  const onLoggedIn = (next) => {
+    saveSession(next)
+    setSession(next)
+  }
+
+  if (!session) return <AuthScreen onLoggedIn={onLoggedIn} />
+  if (session.user.role === 'employee') return <EmployeePortal user={session.user} onLogout={logout} />
+  return <AdminShell user={session.user} onLogout={logout} />
+}
+
+const NAV = [
+  { id: 'clients', label: 'Clients', icon: '▦', platformOnly: true },
+  { id: 'employees', label: 'Employees', icon: '☺', needsClient: true },
+  { id: 'runs', label: 'Payroll runs', icon: '₹', needsClient: true },
+  { id: 'filings', label: 'Compliance calendar', icon: '◷' },
+  { id: 'users', label: 'Users and access', icon: '⚿' },
+  { id: 'rules', label: 'Compliance rules', icon: '§', platformOnly: true },
+]
+
+function AdminShell({ user, onLogout }) {
+  const platform = user.is_platform_admin
   const [clients, setClients] = useState([])
-  const [clientId, setClientId] = useState('')
-  const [tab, setTab] = useState('clients')
-  const [user, setUserState] = useState(getUser())
+  const [clientId, setClientId] = useState(user.client_id || '')
+  const [tab, setTab] = useState(platform ? 'clients' : 'employees')
   const [error, setError] = useState('')
 
   const loadClients = useCallback(async () => {
@@ -36,70 +62,86 @@ export default function App() {
     loadClients()
   }, [loadClients])
 
-  const changeUser = (name) => {
-    setUserState(name)
-    setUser(name)
-  }
-
   const client = clients.find((c) => c.id === clientId)
+  const nav = NAV.filter((n) => platform || !n.platformOnly)
 
   return (
-    <div className="app">
-      <header className="topbar">
+    <div className="shell">
+      <aside className="sidebar">
         <div className="brand">
-          ClearPay4U <span className="tagline">zero-penalty payroll</span>
+          <span className="logo">C4U</span>
+          <span>
+            ClearPay4U
+            <span className="tagline">zero-penalty payroll</span>
+          </span>
         </div>
-        <label className="field-inline">
-          Client
-          <select value={clientId} onChange={(e) => setClientId(e.target.value)}>
-            {clients.length === 0 && <option value="">No clients yet</option>}
-            {clients.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.legal_name} ({c.state})
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="field-inline" title="Placeholder sign-in: actions are recorded under this name">
-          Acting as
-          <input value={user} onChange={(e) => changeUser(e.target.value)} size={10} />
-        </label>
-      </header>
+        <nav className="side-nav" aria-label="Main">
+          {nav.map((n) => (
+            <button
+              key={n.id}
+              className={tab === n.id ? 'nav-item active' : 'nav-item'}
+              disabled={n.needsClient && !clientId}
+              aria-current={tab === n.id ? 'page' : undefined}
+              onClick={() => setTab(n.id)}
+            >
+              <span className="nav-icon" aria-hidden="true">{n.icon}</span>
+              <span>{n.label}</span>
+            </button>
+          ))}
+        </nav>
+        <div className="side-footer">
+          <div className="who">
+            <span className="avatar" aria-hidden="true">{user.name.slice(0, 1).toUpperCase()}</span>
+            <span>
+              <strong>{user.name}</strong>
+              <span className="muted small">{platform ? 'Platform admin' : 'Client admin'}</span>
+            </span>
+          </div>
+          <button className="ghost" onClick={onLogout}>Log out</button>
+        </div>
+      </aside>
 
-      <nav className="tabs">
-        {TABS.map((t) => (
-          <button
-            key={t.id}
-            className={tab === t.id ? 'tab active' : 'tab'}
-            disabled={t.needsClient && !clientId}
-            onClick={() => setTab(t.id)}
-          >
-            {t.label}
-          </button>
-        ))}
-      </nav>
+      <div className="main-col">
+        <header className="topbar">
+          <h1 className="page-title">{nav.find((n) => n.id === tab)?.label}</h1>
+          {platform ? (
+            <label className="field-inline">
+              <span className="muted small">Client</span>
+              <select value={clientId} onChange={(e) => setClientId(e.target.value)}>
+                {clients.length === 0 && <option value="">No clients yet</option>}
+                {clients.map((c) => (
+                  <option key={c.id} value={c.id}>{c.legal_name} ({c.state})</option>
+                ))}
+              </select>
+            </label>
+          ) : (
+            client && <span className="client-chip">{client.legal_name}</span>
+          )}
+        </header>
 
-      {error && <div className="banner error">{error}</div>}
+        {error && <div className="banner error">{error}</div>}
 
-      <main>
-        {tab === 'clients' && (
-          <ClientsPage
-            clients={clients}
-            onCreated={async (id) => {
-              await loadClients()
-              setClientId(id)
-            }}
-            onOpen={(id) => {
-              setClientId(id)
-              setTab('employees')
-            }}
-          />
-        )}
-        {tab === 'employees' && client && <EmployeesPage client={client} />}
-        {tab === 'runs' && client && <RunsPage client={client} user={user} />}
-        {tab === 'filings' && <FilingsPage clientId={clientId} clients={clients} />}
-        {tab === 'rules' && <RulesPage />}
-      </main>
+        <main>
+          {tab === 'clients' && platform && (
+            <ClientsPage
+              clients={clients}
+              onCreated={async (id) => {
+                await loadClients()
+                setClientId(id)
+              }}
+              onOpen={(id) => {
+                setClientId(id)
+                setTab('employees')
+              }}
+            />
+          )}
+          {tab === 'employees' && client && <EmployeesPage client={client} />}
+          {tab === 'runs' && client && <RunsPage client={client} user={user.email} />}
+          {tab === 'filings' && <FilingsPage clientId={clientId} clients={clients} canSeeAll={platform} />}
+          {tab === 'users' && <UsersPage user={user} clients={clients} />}
+          {tab === 'rules' && platform && <RulesPage />}
+        </main>
+      </div>
     </div>
   )
 }

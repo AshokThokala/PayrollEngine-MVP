@@ -15,9 +15,9 @@ def test_client_id_pattern_names_the_field():
 def test_missing_and_multiple_fields():
     out = errors.from_validation([
         {"type": "missing", "loc": ("body", "legal_name"), "msg": "Field required"},
-        {"type": "missing", "loc": ("header", "x-user"), "msg": "Field required"},
+        {"type": "missing", "loc": ("header", "authorization"), "msg": "Field required"},
     ])
-    assert out["detail"] == "Legal name: This field is required; Acting as: This field is required"
+    assert out["detail"] == "Legal name: This field is required; Login: This field is required"
 
 
 def test_salary_component_and_attendance_labels():

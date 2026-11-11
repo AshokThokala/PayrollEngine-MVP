@@ -114,3 +114,37 @@ class StatutoryRule:
     @property
     def id(self) -> str:
         return f"{self.scope}:{self.category}:{self.valid_from.isoformat()}"
+
+
+class Role(str, enum.Enum):
+    ADMIN = "admin"
+    EMPLOYEE = "employee"
+
+
+class UserStatus(str, enum.Enum):
+    ACTIVE = "active"
+    PENDING = "pending"  # employee sign-ups wait for the employer's admin
+    DISABLED = "disabled"
+
+
+@dataclass
+class User:
+    """A login. Admins with no client_id are platform admins (the payroll service team);
+    admins with a client_id manage only that client; employees see only themselves."""
+
+    id: str
+    email: str
+    name: str
+    role: Role
+    password_hash: str
+    status: UserStatus = UserStatus.ACTIVE
+    client_id: str | None = None
+    employee_code: str | None = None
+    created_at: datetime | None = None
+
+    @property
+    def is_platform_admin(self) -> bool:
+        return self.role == Role.ADMIN and self.client_id is None
+
+    def can_manage(self, client_id: str) -> bool:
+        return self.role == Role.ADMIN and (self.client_id is None or self.client_id == client_id)
