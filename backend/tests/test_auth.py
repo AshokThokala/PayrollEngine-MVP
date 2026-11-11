@@ -103,3 +103,46 @@ def test_bootstrap_admin_only_when_no_users(repo):
     first = a.ensure_bootstrap_admin("ops@clearpay4u.in", "Platform123")
     assert first.is_platform_admin
     assert a.ensure_bootstrap_admin("other@clearpay4u.in", "Platform123") is None
+
+
+def test_admin_can_view_as_employee_read_only(repo):
+    svc, a = setup(repo)
+    asha = a.signup_client(Client(id="acme", legal_name="Acme", state="TG"), "Asha", "asha@acme.in", "Payroll123")
+    bala = a.signup_client(Client(id="beta", legal_name="Beta", state="TG"), "Bala", "bala@beta.in", "Payroll123")
+    svc.add_employee(EmployeeRecord("acme", Employee(code="E1", name="Ravi"),
+                                    SalaryStructure({"basic": 20000}), date(2026, 4, 1)), asha.email)
+    viewer, token = a.view_as(asha, "acme", "E1")
+    assert viewer.role == Role.EMPLOYEE and viewer.employee_code == "E1"
+    assert viewer.impersonated_by == "asha@acme.in" and viewer.name == "Ravi"
+    assert a.user_from_token(token).employee_code == "E1"
+    assert a.my_record(viewer)[1].code == "E1"
+    with pytest.raises(AccessDenied, match="Read-only"):
+        a.update_my_tax(viewer, regime="old", age_group="below_60", metro_city=False,
+                        parents_senior=False, declarations={})
+    with pytest.raises(AccessDenied):
+        a.view_as(bala, "acme", "E1")  # other client's admin
+    with pytest.raises(AccessDenied):
+        a.view_as(viewer, "acme", "E1")  # no chaining
+    assert repo.audit_log()[-1].action == "user.view_as"
+    a.set_status(a.create_platform_admin("ops@cp.in", "Platform123"), asha.id, UserStatus.DISABLED)
+    assert a.user_from_token(token) is None  # disabling the admin ends the view
+
+
+def test_edit_client_and_employee(repo):
+    svc, a = setup(repo)
+    svc.add_client(Client(id="acme", legal_name="Acme", state="TG"), "ops")
+    svc.update_client("acme", {"legal_name": "Acme Textiles Pvt Ltd", "pan": "AAACA1234A", "id": "x"}, "ops")
+    c = repo.get_client("acme")
+    assert (c.id, c.legal_name, c.pan) == ("acme", "Acme Textiles Pvt Ltd", "AAACA1234A")
+    with pytest.raises(ServiceError):
+        svc.update_client("acme", {"legal_name": " "}, "ops")
+    svc.add_employee(EmployeeRecord("acme", Employee(code="E1", name="Ravi"),
+                                    SalaryStructure({"basic": 20000}), date(2026, 4, 1)), "ops")
+    warnings = svc.update_employee("acme", "E1", "ops", name="Ravi Kumar",
+                                   components={"basic": 10000, "special_allowance": 15000},
+                                   flags={"pt_applicable": False, "unknown": True})
+    e = repo.get_employee("acme", "E1")
+    assert e.employee.name == "Ravi Kumar" and e.employee.pt_applicable is False
+    assert e.structure.components["special_allowance"] == 15000
+    assert len(warnings) == 1  # basic below 50%
+    assert repo.audit_log()[-1].detail == "changed: name, pt_applicable, salary"

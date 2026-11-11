@@ -230,6 +230,56 @@ class PayrollService:
         self._audit(user, "client.create", client.id)
         return client
 
+    CLIENT_EDITABLE = ("legal_name", "pan", "tan", "pf_code", "esi_code", "pt_registration")
+    EMPLOYEE_FLAGS = ("pf_member", "eps_member", "pf_on_full_wages", "esi_covered",
+                      "pt_applicable", "lwf_applicable")
+
+    def update_client(self, client_id: str, changes: dict, user: str) -> Client:
+        """Edit a client's details. The ID and state stay fixed (they key history and rules)."""
+        client = self.repo.get_client(client_id)
+        if not (changes.get("legal_name", client.legal_name) or "").strip():
+            raise ServiceError("This field is required", field="legal_name")
+        changed = []
+        for key in self.CLIENT_EDITABLE:
+            if key in changes and changes[key] is not None and changes[key] != getattr(client, key):
+                setattr(client, key, changes[key].strip())
+                changed.append(key)
+        if changed:
+            self.repo.update_client(client)
+            self._audit(user, "client.edit", client_id, "changed: " + ", ".join(changed))
+        return client
+
+    def update_employee(self, client_id: str, code: str, user: str, *, name: str | None = None,
+                        components: dict | None = None, flags: dict | None = None) -> list[str]:
+        """Edit an employee's name, statutory settings and salary (a new salary version)."""
+        record = self.repo.get_employee(client_id, code)
+        e, changed = record.employee, []
+        if name is not None:
+            if not name.strip():
+                raise ServiceError("This field is required", field="name")
+            if name.strip() != e.name:
+                e.name, changed = name.strip(), changed + ["name"]
+        for key, value in (flags or {}).items():
+            if key in self.EMPLOYEE_FLAGS and getattr(e, key) != value:
+                setattr(e, key, value)
+                changed.append(key)
+        warnings: list[str] = []
+        if components is not None:
+            structure = SalaryStructure(components)
+            if structure.total <= 0:
+                raise ServiceError("Enter at least one salary amount", field="components")
+            if structure.components != record.structure.components:
+                old = record.structure.components
+                record.structure = structure
+                changed.append("salary")
+                self._audit(user, "employee.salary", f"{client_id}/{code}",
+                            f"{_fmt(old)} -> {_fmt(structure.components)}")
+            warnings = self.structure_warnings(record.structure, self.clock().date())
+        if changed:
+            self.repo.save_employee(record)
+            self._audit(user, "employee.edit", f"{client_id}/{code}", "changed: " + ", ".join(changed))
+        return warnings
+
     def add_employee(self, record: EmployeeRecord, user: str) -> list[str]:
         client = self.repo.get_client(record.client_id)
         try:

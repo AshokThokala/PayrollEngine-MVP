@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useState } from 'react'
-import { api, loadSession, saveSession, whenLoggedOut } from './api.js'
+import { api, loadSession, saveSession, stashAdminSession, stashedAdminSession, whenLoggedOut } from './api.js'
+import ClientSwitcher from './components/ClientSwitcher.jsx'
 import AuthScreen from './pages/AuthScreen.jsx'
 import ClientsPage from './pages/ClientsPage.jsx'
 import EmployeesPage from './pages/EmployeesPage.jsx'
 import EmployeePortal from './pages/EmployeePortal.jsx'
+import ReportsPage from './pages/ReportsPage.jsx'
 import FilingsPage from './pages/FilingsPage.jsx'
 import RulesPage from './pages/RulesPage.jsx'
 import RunsPage from './pages/RunsPage.jsx'
@@ -14,6 +16,7 @@ export default function App() {
 
   const logout = useCallback(() => {
     saveSession(null)
+    stashAdminSession(null)
     setSession(null)
   }, [])
 
@@ -26,9 +29,25 @@ export default function App() {
     setSession(next)
   }
 
+  // "View as employee": keep the admin's session aside, show the portal with a read-only session.
+  const viewAs = async (clientId, code) => {
+    const viewing = await api.viewAs(clientId, code)
+    stashAdminSession(session)
+    onLoggedIn(viewing)
+  }
+
+  const backToAdmin = () => {
+    const admin = stashedAdminSession()
+    stashAdminSession(null)
+    if (admin) onLoggedIn(admin)
+    else logout()
+  }
+
   if (!session) return <AuthScreen onLoggedIn={onLoggedIn} />
-  if (session.user.role === 'employee') return <EmployeePortal user={session.user} onLogout={logout} />
-  return <AdminShell user={session.user} onLogout={logout} />
+  if (session.user.role === 'employee') {
+    return <EmployeePortal user={session.user} onLogout={session.user.impersonated_by ? backToAdmin : logout} />
+  }
+  return <AdminShell user={session.user} onLogout={logout} onViewAs={viewAs} />
 }
 
 const NAV = [
@@ -36,11 +55,12 @@ const NAV = [
   { id: 'employees', label: 'Employees', icon: '☺', needsClient: true },
   { id: 'runs', label: 'Payroll runs', icon: '₹', needsClient: true },
   { id: 'filings', label: 'Compliance calendar', icon: '◷' },
+  { id: 'reports', label: 'Reports', icon: '▤', needsClient: true },
   { id: 'users', label: 'Users and access', icon: '⚿' },
   { id: 'rules', label: 'Compliance rules', icon: '§', platformOnly: true },
 ]
 
-function AdminShell({ user, onLogout }) {
+function AdminShell({ user, onLogout, onViewAs }) {
   const platform = user.is_platform_admin
   const [clients, setClients] = useState([])
   const [clientId, setClientId] = useState(user.client_id || '')
@@ -104,16 +124,8 @@ function AdminShell({ user, onLogout }) {
       <div className="main-col">
         <header className="topbar">
           <h1 className="page-title">{nav.find((n) => n.id === tab)?.label}</h1>
-          {platform ? (
-            <label className="field-inline">
-              <span className="muted small">Client</span>
-              <select value={clientId} onChange={(e) => setClientId(e.target.value)}>
-                {clients.length === 0 && <option value="">No clients yet</option>}
-                {clients.map((c) => (
-                  <option key={c.id} value={c.id}>{c.legal_name} ({c.state})</option>
-                ))}
-              </select>
-            </label>
+          {platform && clients.length > 0 ? (
+            <ClientSwitcher clients={clients} value={clientId} onChange={setClientId} />
           ) : (
             client && <span className="client-chip">{client.legal_name}</span>
           )}
@@ -133,11 +145,15 @@ function AdminShell({ user, onLogout }) {
                 setClientId(id)
                 setTab('employees')
               }}
+              onUpdated={loadClients}
             />
           )}
-          {tab === 'employees' && client && <EmployeesPage client={client} />}
+          {tab === 'employees' && client && (
+            <EmployeesPage client={client} onViewAs={(code) => onViewAs(client.id, code).catch((e) => setError(e.message))} />
+          )}
           {tab === 'runs' && client && <RunsPage client={client} user={user.email} />}
           {tab === 'filings' && <FilingsPage clientId={clientId} clients={clients} canSeeAll={platform} />}
+          {tab === 'reports' && client && <ReportsPage client={client} />}
           {tab === 'users' && <UsersPage user={user} clients={clients} />}
           {tab === 'rules' && platform && <RulesPage />}
         </main>

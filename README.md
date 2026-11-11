@@ -36,6 +36,15 @@ docker compose down -v            # stop and DELETE all data
 Passwords are hashed with scrypt; logins last 12 hours. Set `SECRET_KEY` (see `backend/.env.example`).
 A payroll run must be approved by a different admin from the one who calculated it.
 
+### Working in the app
+- **Switch clients** with the client button at the top right (search by name or ID). Client admins see only their company.
+- **Click a client or employee row** to open its details and edit them; *+ Add client* / *+ Add employee* open the add form.
+- **View as employee** (on an employee's details) opens the employee portal exactly as that employee sees it,
+  read-only, for one hour, with a *Back to admin* button. Every use is recorded in the audit log; it works even if
+  the employee has no login yet.
+- **Reports**: salary register, statutory dues by month, payroll cost trend (with chart), compliance status and
+  income tax summary - each with totals and *Download CSV*.
+
 ### Using the UI
 1. **Clients** - add a client firm. Only states that have compliance rules can be chosen.
 2. **Employees** - add employees with their monthly salary split; you are warned if basic + DA is under 50%.

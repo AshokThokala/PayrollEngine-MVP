@@ -141,6 +141,7 @@ class User:
     client_id: str | None = None
     employee_code: str | None = None
     created_at: datetime | None = None
+    impersonated_by: str | None = None  # admin email when an admin is viewing as this employee
 
     @property
     def is_platform_admin(self) -> bool:

@@ -184,3 +184,31 @@ def test_roles_and_self_service(client, ops, reviewer):
     r = client.post("/auth/signup/employee", json={"client_id": "acme", "employee_code": "E1",
                                                    "name": "X", "email": "bad", "password": "x"})
     assert r.status_code == 409 and r.json()["errors"][0]["label"] == "Employee code"
+
+
+def test_reports_edit_and_view_as(client, ops, reviewer):
+    client.post("/clients", headers=ops, json={"id": "acme", "legal_name": "Acme"})
+    client.post("/clients/acme/employees", headers=ops, json={
+        "code": "E1", "name": "Ravi", "joined_on": "2026-04-01", "components": {"basic": 30000}})
+    run = client.post("/clients/acme/runs", headers=ops, json={"period": "2026-10-01"}).json()
+    client.post(f"/runs/{run['id']}/approve", headers=reviewer)
+    client.post(f"/runs/{run['id']}/lock", headers=reviewer)
+
+    assert {r["key"] for r in client.get("/reports", headers=ops).json()} >= {"salary_register", "cost_trend"}
+    reg = client.get("/clients/acme/reports/salary_register", params={"month": "2026-10-01"}, headers=ops).json()
+    assert reg["rows"][0]["code"] == "E1" and reg["columns"][0]["key"] == "code"
+    assert client.get("/clients/acme/reports/nope", headers=ops).status_code == 404
+
+    r = client.put("/clients/acme", headers=ops, json={"legal_name": "Acme Textiles", "pan": "AAACA1234A"})
+    assert r.json()["legal_name"] == "Acme Textiles"
+    r = client.put("/clients/acme/employees/E1", headers=ops,
+                   json={"name": "Ravi Kumar", "flags": {"pt_applicable": False}})
+    assert r.json()["employee"]["name"] == "Ravi Kumar" and r.json()["employee"]["flags"]["pt_applicable"] is False
+
+    r = client.post("/clients/acme/employees/E1/view-as", headers=ops)
+    assert r.json()["user"]["impersonated_by"] == "ops1@cp.in"
+    viewer = {"Authorization": f"Bearer {r.json()['token']}"}
+    assert client.get("/me/employee", headers=viewer).json()["employee"]["code"] == "E1"
+    assert len(client.get("/me/payslips", headers=viewer).json()) == 1
+    assert client.put("/me/tax", headers=viewer, json={"tax_regime": "old"}).status_code == 403
+    assert client.get("/clients", headers=viewer).status_code == 403

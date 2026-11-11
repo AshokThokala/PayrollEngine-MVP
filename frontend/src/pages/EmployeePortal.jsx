@@ -44,6 +44,7 @@ export default function EmployeePortal({ user, onLogout }) {
   }
 
   const latest = slips[0]?.payslip
+  const viewingAs = user.impersonated_by
 
   return (
     <div className="portal">
@@ -53,11 +54,17 @@ export default function EmployeePortal({ user, onLogout }) {
           <span>ClearPay4U<span className="tagline">{me ? me.client_name : 'zero-penalty payroll'}</span></span>
         </div>
         <div className="inline">
-          <span className="muted small hide-sm">{user.email}</span>
-          <button className="ghost light" onClick={onLogout}>Log out</button>
+          <span className="muted small hide-sm">{viewingAs ? `Viewing as ${user.name}` : user.email}</span>
+          <button className="ghost light" onClick={onLogout}>{viewingAs ? 'Back to admin' : 'Log out'}</button>
         </div>
       </header>
 
+      {viewingAs && (
+        <div className="view-as-bar" role="status">
+          <span>You're viewing as <strong>{user.name}</strong> (read-only). Recorded in the audit log.</span>
+          <button onClick={onLogout}>Back to admin</button>
+        </div>
+      )}
       <main className="portal-main">
         <h1 className="greeting">Hello, {user.name.split(' ')[0]}</h1>
         {message && <div className={`banner ${message.kind}`}>{message.text}</div>}
@@ -111,8 +118,12 @@ export default function EmployeePortal({ user, onLogout }) {
               <form className="form section" onSubmit={saveTax}>
                 <h2>Income tax declarations</h2>
                 <p className="muted small">Choose your regime and declare your investments so the right tax is deducted each month.</p>
-                <TaxFields value={tax} onChange={setTax} errors={taxErrors} />
-                <button className="primary">Save tax details</button>
+                <fieldset className="plain" disabled={!!viewingAs}>
+                  <TaxFields value={tax} onChange={setTax} errors={taxErrors} />
+                </fieldset>
+                {viewingAs
+                  ? <p className="muted small">Read-only while viewing as this employee. Edit tax details from the Employees page.</p>
+                  : <button className="primary">Save tax details</button>}
               </form>
             )}
           </section>

@@ -36,7 +36,9 @@ function Field({ name, label, error, children }) {
 
 const EMPTY = { id: '', legal_name: '', state: 'TG', pan: '', tan: '', pf_code: '', esi_code: '', pt_registration: '' }
 
-export default function ClientsPage({ clients, onCreated, onOpen }) {
+export default function ClientsPage({ clients, onCreated, onOpen, onUpdated }) {
+  const [mode, setMode] = useState('none') // none | add | edit
+  const [selectedId, setSelectedId] = useState(null)
   const [form, setForm] = useState(EMPTY)
   const [message, setMessage] = useState(null)
   const [busy, setBusy] = useState(false)
@@ -53,16 +55,38 @@ export default function ClientsPage({ clients, onCreated, onOpen }) {
     if (fieldErrors[key]) setFieldErrors({ ...fieldErrors, [key]: undefined })
   }
 
+  const startAdd = () => {
+    setMode('add')
+    setSelectedId(null)
+    setForm(EMPTY)
+    setFieldErrors({})
+    setMessage(null)
+  }
+
+  const select = (c) => {
+    setMode('edit')
+    setSelectedId(c.id)
+    setForm({ ...EMPTY, ...c })
+    setFieldErrors({})
+    setMessage(null)
+  }
+
   const submit = async (e) => {
     e.preventDefault()
     setBusy(true)
     setFieldErrors({})
     try {
-      await api.createClient(form)
-      setMessage({ kind: 'ok', text: `Client ${form.legal_name} created.` })
-      const id = form.id
-      setForm(EMPTY)
-      await onCreated(id)
+      if (mode === 'add') {
+        await api.createClient(form)
+        setMessage({ kind: 'ok', text: `Client ${form.legal_name} created.` })
+        await onCreated(form.id)
+        select(form)
+      } else {
+        const { legal_name, pan, tan, pf_code, esi_code, pt_registration } = form
+        await api.updateClient(selectedId, { legal_name, pan, tan, pf_code, esi_code, pt_registration })
+        setMessage({ kind: 'ok', text: 'Changes saved.' })
+        await onUpdated()
+      }
     } catch (err) {
       setFieldErrors(err.fieldErrors || {})
       setMessage({ kind: 'error', text: err.message })
@@ -71,62 +95,87 @@ export default function ClientsPage({ clients, onCreated, onOpen }) {
     }
   }
 
+  const editing = mode === 'edit'
+
   return (
     <div className="grid">
       <section className="card">
-        <h2>Clients</h2>
+        <div className="run-head">
+          <h2>Clients</h2>
+          <button className="primary" onClick={startAdd}>+ Add client</button>
+        </div>
         {clients.length === 0 ? (
           <p className="muted">No clients yet. Add your first client firm.</p>
         ) : (
-          <table>
-            <thead>
-              <tr><th>ID</th><th>Legal name</th><th>State</th><th>PF code</th><th>ESI code</th><th></th></tr>
-            </thead>
-            <tbody>
-              {clients.map((c) => (
-                <tr key={c.id}>
-                  <td>{c.id}</td>
-                  <td>{c.legal_name}</td>
-                  <td>{c.state}</td>
-                  <td>{c.pf_code || '—'}</td>
-                  <td>{c.esi_code || '—'}</td>
-                  <td><button className="link" onClick={() => onOpen(c.id)}>Employees →</button></td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <div className="table-wrap">
+            <table className="clickable">
+              <thead>
+                <tr><th>Legal name</th><th>ID</th><th>State</th><th>PF code</th></tr>
+              </thead>
+              <tbody>
+                {clients.map((c) => (
+                  <tr key={c.id} tabIndex={0} className={selectedId === c.id ? 'selected' : ''}
+                    onClick={() => select(c)} onKeyDown={(e) => { if (e.key === 'Enter') select(c) }}>
+                    <td><strong>{c.legal_name}</strong></td>
+                    <td>{c.id}</td>
+                    <td>{c.state}</td>
+                    <td>{c.pf_code || '—'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
+        <p className="muted small">Click a client to view or edit its details.</p>
       </section>
 
-      <section className="card allow-overflow">
-        <h2>Add client</h2>
-        <form onSubmit={submit} className="form">
-          <Field name="id" error={fieldErrors.id} label="Client ID">
-            <input required pattern="[a-z0-9-]{2,40}" value={form.id} onChange={set('id')} />
-          </Field>
-          <Field name="legal_name" error={fieldErrors.legal_name} label="Legal name">
-            <input required value={form.legal_name} onChange={set('legal_name')} />
-          </Field>
-          <Field name="state" error={fieldErrors.state} label="State">
-            <select value={form.state} onChange={set('state')}>
-              {states.map((s) => <option key={s.code} value={s.code}>{s.name}</option>)}
-            </select>
-          </Field>
-          <div className="row">
-            <Field name="pan" error={fieldErrors.pan} label="PAN"><input value={form.pan} onChange={set('pan')} /></Field>
-            <Field name="tan" error={fieldErrors.tan} label="TAN"><input value={form.tan} onChange={set('tan')} /></Field>
+      {mode === 'none' ? (
+        <section className="card empty-state">
+          <h2>Client details</h2>
+          <p className="muted">Select a client on the left to see and edit its details, or add a new one.</p>
+          <button onClick={startAdd}>+ Add client</button>
+        </section>
+      ) : (
+        <section className="card allow-overflow">
+          <div className="run-head">
+            <h2>{editing ? form.legal_name || selectedId : 'Add client'}</h2>
+            {editing && <button onClick={() => onOpen(selectedId)}>Open employees →</button>}
           </div>
-          <div className="row">
-            <Field name="pf_code" error={fieldErrors.pf_code} label="PF code"><input value={form.pf_code} onChange={set('pf_code')} /></Field>
-            <Field name="esi_code" error={fieldErrors.esi_code} label="ESI code"><input value={form.esi_code} onChange={set('esi_code')} /></Field>
-          </div>
-          <Field name="pt_registration" error={fieldErrors.pt_registration} label="PT registration">
-            <input value={form.pt_registration} onChange={set('pt_registration')} />
-          </Field>
-          <button className="primary" disabled={busy}>{busy ? 'Saving…' : 'Create client'}</button>
-          {message && <div className={`banner ${message.kind}`}>{message.text}</div>}
-        </form>
-      </section>
+          <form onSubmit={submit} className="form">
+            <div className="row">
+              <Field name="id" error={fieldErrors.id} label="Client ID">
+                <input required pattern="[a-z0-9-]{2,40}" value={form.id} onChange={set('id')} disabled={editing} />
+              </Field>
+              <Field name="state" error={fieldErrors.state} label="State">
+                <select value={form.state} onChange={set('state')} disabled={editing}>
+                  {states.map((s) => <option key={s.code} value={s.code}>{s.name}</option>)}
+                  {editing && !states.some((s) => s.code === form.state) && <option value={form.state}>{form.state}</option>}
+                </select>
+              </Field>
+            </div>
+            <Field name="legal_name" error={fieldErrors.legal_name} label="Legal name">
+              <input required value={form.legal_name} onChange={set('legal_name')} />
+            </Field>
+            <div className="row">
+              <Field name="pan" error={fieldErrors.pan} label="PAN"><input value={form.pan} onChange={set('pan')} /></Field>
+              <Field name="tan" error={fieldErrors.tan} label="TAN"><input value={form.tan} onChange={set('tan')} /></Field>
+            </div>
+            <div className="row">
+              <Field name="pf_code" error={fieldErrors.pf_code} label="PF code"><input value={form.pf_code} onChange={set('pf_code')} /></Field>
+              <Field name="esi_code" error={fieldErrors.esi_code} label="ESI code"><input value={form.esi_code} onChange={set('esi_code')} /></Field>
+            </div>
+            <Field name="pt_registration" error={fieldErrors.pt_registration} label="PT registration">
+              <input value={form.pt_registration} onChange={set('pt_registration')} />
+            </Field>
+            {editing && <p className="muted small">Client ID and state can't be changed: they key the payroll history and the rules applied.</p>}
+            {message && <div className={`banner ${message.kind}`}>{message.text}</div>}
+            <div className="inline">
+              <button className="primary" disabled={busy}>{busy ? 'Saving…' : editing ? 'Save changes' : 'Create client'}</button>
+              <button type="button" onClick={() => { setMode('none'); setSelectedId(null) }}>Close</button>
+            </div>
+          </form>
+        </section>
+      )}
     </div>
   )
 }
