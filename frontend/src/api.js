@@ -91,6 +91,7 @@ export const api = {
   signupEmployee: (body) => request('POST', '/auth/signup/employee', body),
   me: () => request('GET', '/auth/me'),
   listUsers: () => request('GET', '/users'),
+  addUser: (body) => request('POST', '/users', body),
   userAction: (userId, action) => request('POST', `/users/${enc(userId)}/${action}`),
   myEmployee: () => request('GET', '/me/employee'),
   myPayslips: () => request('GET', '/me/payslips'),

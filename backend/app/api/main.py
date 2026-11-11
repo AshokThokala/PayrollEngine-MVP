@@ -438,6 +438,13 @@ def list_users(client_id: str | None = None, limit: int = Query(500, ge=1, le=20
     return [_user_out(u) for u in auth.list_users(actor, client_id)[offset:offset + limit]]
 
 
+@app.post("/users", status_code=201, response_model=s.UserOut)
+def add_user(body: s.UserIn, actor: User = Depends(admin_user), auth: AuthService = Depends(get_auth)):
+    """Add an admin login (active straight away). Employees join through invites instead."""
+    return _user_out(auth.create_admin(actor, name=body.name, email=body.email, password=body.password,
+                                       client_id=body.client_id))
+
+
 @app.post("/users/{user_id}/{action}", response_model=s.UserOut)
 def change_user(user_id: str, action: str, actor: User = Depends(admin_user),
                 auth: AuthService = Depends(get_auth)):
