@@ -38,6 +38,12 @@ FIELD_LABELS = {
     "overtime": "Overtime",
     "other_earnings": "Other earnings",
     "other_deductions": "Other deductions",
+    # compliance rules
+    "valid_from": "Effective from",
+    "scope": "Scope",
+    "category": "Rule type",
+    "source": "Source",
+    "params": "Rule values",
     # filings
     "status": "Status",
     "challan_ref": "Challan / ack reference",
@@ -126,6 +132,10 @@ def from_validation(raw_errors: list[dict]) -> dict:
         field, label = label_for(list(err.get("loc", [])))
         errors.append(field_error(field, label, message_for(err)))
     return body(errors)
+
+
+def from_field_errors(errors_by_field: dict[str, str], label_for_key) -> dict:
+    return body([field_error(k, label_for_key(k), v) for k, v in errors_by_field.items()])
 
 
 def from_service(message: str, field: str | None) -> dict:

@@ -96,3 +96,21 @@ class AuditEvent:
     action: str
     entity: str
     detail: str = ""
+
+
+@dataclass
+class StatutoryRule:
+    """One dated version of a compliance rule, e.g. PF from 2026-09-17 or TG professional tax."""
+
+    scope: str  # "central" or a state code such as "TG"
+    category: str  # pf, esi, wage_code, income_tax_new_regime, filing_due_dates, professional_tax, lwf
+    valid_from: date
+    params: dict
+    valid_to: date | None = None
+    source: str = ""
+    created_by: str = "system"
+    created_at: datetime | None = None
+
+    @property
+    def id(self) -> str:
+        return f"{self.scope}:{self.category}:{self.valid_from.isoformat()}"

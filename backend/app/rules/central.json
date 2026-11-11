@@ -39,7 +39,11 @@
       "valid_from": "2025-11-21",
       "valid_to": null,
       "min_wage_share_of_total": 0.5,
-      "wage_components": ["basic", "da", "retaining_allowance"],
+      "wage_components": [
+        "basic",
+        "da",
+        "retaining_allowance"
+      ],
       "fnf_settlement_working_days": 2,
       "source": "Code on Wages, 2019 - effective 21 Nov 2025"
     }
@@ -50,18 +54,54 @@
       "valid_to": null,
       "standard_deduction": 75000,
       "slabs": [
-        {"upto": 400000, "rate": 0.0},
-        {"upto": 800000, "rate": 0.05},
-        {"upto": 1200000, "rate": 0.10},
-        {"upto": 1600000, "rate": 0.15},
-        {"upto": 2000000, "rate": 0.20},
-        {"upto": 2400000, "rate": 0.25},
-        {"upto": null, "rate": 0.30}
+        {
+          "upto": 400000,
+          "rate": 0.0
+        },
+        {
+          "upto": 800000,
+          "rate": 0.05
+        },
+        {
+          "upto": 1200000,
+          "rate": 0.1
+        },
+        {
+          "upto": 1600000,
+          "rate": 0.15
+        },
+        {
+          "upto": 2000000,
+          "rate": 0.2
+        },
+        {
+          "upto": 2400000,
+          "rate": 0.25
+        },
+        {
+          "upto": null,
+          "rate": 0.3
+        }
       ],
       "rebate_income_limit": 1200000,
       "rebate_max": 60000,
       "cess_rate": 0.04,
       "source": "New regime slabs from Finance Act 2025 - VERIFY under Income-tax Act 2025"
+    }
+  ],
+  "filing_due_dates": [
+    {
+      "valid_from": "2020-04-01",
+      "valid_to": null,
+      "pf_due_day": 15,
+      "esi_due_day": 15,
+      "tds_due_day": 7,
+      "tds_march_due": "04-30",
+      "form_24q_q1_due": "07-31",
+      "form_24q_q2_due": "10-31",
+      "form_24q_q3_due": "01-31",
+      "form_24q_q4_due": "05-31",
+      "source": "EPF/ESI: 15th of next month; TDS: 7th (March: 30 April); Form 24Q quarterly - VERIFY"
     }
   ]
 }
