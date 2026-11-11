@@ -13,8 +13,9 @@ import os
 from datetime import date
 from functools import lru_cache
 
-from fastapi import Depends, FastAPI, Header, Request
+from fastapi import Depends, FastAPI, Header, Query, Request
 from fastapi.exceptions import RequestValidationError
+from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import JSONResponse
 
 from ..domain import Client, EmployeeRecord, FilingStatus, PayrollRun, Role, User, UserStatus
@@ -27,7 +28,8 @@ from ..services.compliance import overdue
 from . import errors
 from . import schemas as s
 
-app = FastAPI(title="ClearPay4U API", description="ClearPay4U — zero-penalty payroll", version="0.3.0")
+app = FastAPI(title="ClearPay4U API", description="ClearPay4U — zero-penalty payroll", version="0.4.0")
+app.add_middleware(GZipMiddleware, minimum_size=1000)  # payslip and report responses compress well
 
 
 @lru_cache
@@ -123,16 +125,17 @@ def _lines(lines) -> list[s.LineOut]:
     return [s.LineOut(code=l.code, label=l.label, amount=l.amount, rule=l.rule) for l in lines]
 
 
+def _payslip_out(p) -> s.PayslipOut:
+    return s.PayslipOut(employee_code=p.employee_code, gross=p.gross,
+                        total_deductions=p.total_deductions, net_pay=p.net_pay,
+                        employer_cost=p.employer_cost, statutory_wages=p.statutory_wages,
+                        earnings=_lines(p.earnings), deductions=_lines(p.deductions),
+                        employer_contributions=_lines(p.employer_contributions),
+                        warnings=p.warnings)
+
+
 def _run_out(run: PayrollRun) -> s.RunOut:
-    slips = [
-        s.PayslipOut(employee_code=p.employee_code, gross=p.gross,
-                     total_deductions=p.total_deductions, net_pay=p.net_pay,
-                     employer_cost=p.employer_cost, statutory_wages=p.statutory_wages,
-                     earnings=_lines(p.earnings), deductions=_lines(p.deductions),
-                     employer_contributions=_lines(p.employer_contributions),
-                     warnings=p.warnings)
-        for p in run.slips.values()
-    ]
+    slips = [_payslip_out(p) for p in run.slips.values()]
     return s.RunOut(id=run.id, client_id=run.client_id, period=run.period,
                     status=run.status.value, prepared_by=run.prepared_by,
                     approved_by=run.approved_by, total_gross=run.total_gross,
@@ -148,6 +151,7 @@ def _filing_out(f) -> s.FilingOut:
 
 @app.get("/health")
 def health():
+    """Liveness for load balancers: the process is up (does not touch the database)."""
     return {"status": "ok"}
 
 
@@ -224,12 +228,17 @@ def create_run(client_id: str, body: s.RunIn, actor: User = Depends(admin_user),
     return _run_out(svc.create_draft(client_id, body.period, actor.email, inputs))
 
 
-@app.get("/clients/{client_id}/runs", response_model=list[s.RunOut])
+@app.get("/clients/{client_id}/runs", response_model=list[s.RunSummaryOut])
 def list_runs(client_id: str, actor: User = Depends(admin_user),
               svc: PayrollService = Depends(get_service), auth: AuthService = Depends(get_auth)):
+    """Run headers and totals, newest first. Fetch /runs/{id} for the payslips."""
     auth.check_client(actor, client_id)
     svc.repo.get_client(client_id)
-    return [_run_out(r) for r in reversed(svc.repo.list_runs(client_id))]
+    return [s.RunSummaryOut(id=r.id, client_id=r.client_id, period=r.period, status=r.status.value,
+                            prepared_by=r.prepared_by, approved_by=r.approved_by,
+                            employees=r.employees, total_gross=r.total_gross, total_net=r.total_net,
+                            total_employer_cost=r.total_employer_cost)
+            for r in svc.repo.list_run_summaries(client_id)]
 
 
 @app.get("/runs/{run_id}", response_model=s.RunOut)
@@ -256,13 +265,14 @@ def lock_run(run_id: str, actor: User = Depends(admin_user),
 
 @app.get("/filings", response_model=list[s.FilingOut])
 def list_filings(client_id: str | None = None, overdue_on: date | None = None,
+                 limit: int = Query(500, ge=1, le=2000), offset: int = Query(0, ge=0),
                  actor: User = Depends(admin_user), svc: PayrollService = Depends(get_service)):
     if not actor.is_platform_admin:
         client_id = actor.client_id  # client admins only ever see their own filings
     items = svc.repo.list_filings(client_id)
     if overdue_on:
         items = overdue(items, overdue_on)
-    return [_filing_out(f) for f in items]
+    return [_filing_out(f) for f in items[offset:offset + limit]]
 
 
 @app.post("/filings/{filing_id}", response_model=s.FilingOut)
@@ -372,9 +382,10 @@ def me(user: User = Depends(current_user)):
 # --- user management (admins) -------------------------------------------------------------
 
 @app.get("/users", response_model=list[s.UserOut])
-def list_users(client_id: str | None = None, actor: User = Depends(admin_user),
+def list_users(client_id: str | None = None, limit: int = Query(500, ge=1, le=2000),
+               offset: int = Query(0, ge=0), actor: User = Depends(admin_user),
                auth: AuthService = Depends(get_auth)):
-    return [_user_out(u) for u in auth.list_users(actor, client_id)]
+    return [_user_out(u) for u in auth.list_users(actor, client_id)[offset:offset + limit]]
 
 
 @app.post("/users/{user_id}/{action}", response_model=s.UserOut)
@@ -397,11 +408,8 @@ def my_employee(user: User = Depends(employee_user), auth: AuthService = Depends
 
 @app.get("/me/payslips", response_model=list[s.MyPayslipOut])
 def my_payslips(user: User = Depends(employee_user), auth: AuthService = Depends(get_auth)):
-    out = []
-    for run, slip in auth.my_payslips(user):
-        payslip = next(p for p in _run_out(run).slips if p.employee_code == slip.employee_code)
-        out.append(s.MyPayslipOut(run_id=run.id, period=run.period, payslip=payslip))
-    return out
+    return [s.MyPayslipOut(run_id=run_id, period=period, payslip=_payslip_out(slip))
+            for run_id, period, slip in auth.my_payslips(user)]
 
 
 @app.put("/me/tax", response_model=s.EmployeeOut)

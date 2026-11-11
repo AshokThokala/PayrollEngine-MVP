@@ -148,3 +148,20 @@ class User:
 
     def can_manage(self, client_id: str) -> bool:
         return self.role == Role.ADMIN and (self.client_id is None or self.client_id == client_id)
+
+
+@dataclass
+class RunSummary:
+    """A payroll run's header and totals, without its payslips (for lists)."""
+
+    id: str
+    client_id: str
+    period: date
+    status: RunStatus
+    prepared_by: str
+    approved_by: str | None
+    locked_at: datetime | None
+    employees: int
+    total_gross: Decimal
+    total_net: Decimal
+    total_employer_cost: Decimal

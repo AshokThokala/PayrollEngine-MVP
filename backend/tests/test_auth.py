@@ -66,7 +66,7 @@ def test_employee_signup_needs_approval_and_sees_only_self(repo):
     svc.approve(run.id, "reviewer@acme.in")
     svc.lock(run.id, "reviewer@acme.in")
     slips = a.my_payslips(emp)
-    assert [s.employee_code for _, s in slips] == ["E1"]  # never E2
+    assert [s.employee_code for _, _, s in slips] == ["E1"]  # never E2
 
     a.update_my_tax(emp, regime="old", age_group="below_60", metro_city=False,
                     parents_senior=False, declarations={"sec_80c": 50000})

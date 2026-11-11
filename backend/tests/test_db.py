@@ -28,7 +28,7 @@ def service(repo):
 
 def test_migrate_is_idempotent(tmp_path):
     db = database_from_url(f"sqlite:///{tmp_path / 'm.db'}")
-    assert migrate(db) == ["001_initial", "003_statutory_rules", "004_employee_tax_profile", "005_users"]
+    assert migrate(db) == ["001_initial", "003_statutory_rules", "004_employee_tax_profile", "005_users", "006_scaling_indexes"]
     assert migrate(db) == []
 
 
@@ -101,3 +101,30 @@ def test_postgres_audit_is_append_only(repo):
         conn.execute("DELETE FROM audit_events")
     conn.rollback()
     conn.close()
+
+
+def test_run_summaries_and_filters(repo):
+    from app.domain import RunStatus
+    svc = service(repo)
+    svc.add_employee(EmployeeRecord("acme", Employee(code="E2", name="Sita"),
+                                    SalaryStructure({"basic": 10000}), date(2026, 4, 1)), "ops1")
+    for month in (9, 10):
+        run = svc.create_draft("acme", date(2026, month, 1), user="ops1")
+        svc.approve(run.id, "reviewer")
+        svc.lock(run.id, "reviewer")
+    svc.create_draft("acme", date(2026, 11, 1), user="ops1")
+
+    summaries = repo.list_run_summaries("acme")
+    assert [s.id for s in summaries] == ["acme:2026-11", "acme:2026-10", "acme:2026-09"]
+    oct_run = repo.get_run("acme:2026-10")
+    assert (summaries[1].employees, summaries[1].total_net) == (2, oct_run.total_net)
+    assert summaries[0].status == RunStatus.DRAFT
+
+    locked = repo.list_runs("acme", status=RunStatus.LOCKED, since=date(2026, 10, 1))
+    assert [r.id for r in locked] == ["acme:2026-10"]
+    assert [r.id for r in repo.list_runs("acme", before=date(2026, 10, 1))] == ["acme:2026-09"]
+
+    mine = repo.list_employee_payslips("acme", "E2")
+    assert [(run_id, s.employee_code) for run_id, _, s in mine] == [("acme:2026-10", "E2"), ("acme:2026-09", "E2")]
+    assert mine[0][2].net_pay == oct_run.slips["E2"].net_pay
+    assert [l.code for l in mine[0][2].deductions] == [l.code for l in oct_run.slips["E2"].deductions]

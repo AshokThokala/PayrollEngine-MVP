@@ -5,9 +5,13 @@ will follow; the in-memory one backs the tests and local demos.
 """
 from __future__ import annotations
 
+from datetime import date
+from decimal import Decimal
 from typing import Protocol
 
-from .domain import AuditEvent, Client, EmployeeRecord, Filing, PayrollRun, StatutoryRule, User
+from .domain import (AuditEvent, Client, EmployeeRecord, Filing, PayrollRun, RunStatus, RunSummary,
+                     StatutoryRule, User)
+from .engine.models import Payslip
 
 
 class NotFound(LookupError):
@@ -25,7 +29,11 @@ class Repository(Protocol):
 
     def save_run(self, run: PayrollRun) -> None: ...
     def get_run(self, run_id: str) -> PayrollRun: ...
-    def list_runs(self, client_id: str) -> list[PayrollRun]: ...
+    def list_runs(self, client_id: str, *, status: RunStatus | None = None,
+                  since: date | None = None, before: date | None = None) -> list[PayrollRun]: ...
+    def list_run_summaries(self, client_id: str) -> list[RunSummary]: ...
+    def list_employee_payslips(self, client_id: str, code: str,
+                               status: RunStatus = RunStatus.LOCKED) -> list[tuple[str, date, Payslip]]: ...
 
     def save_filing(self, filing: Filing) -> None: ...
     def get_filing(self, filing_id: str) -> Filing: ...
@@ -86,9 +94,24 @@ class InMemoryRepository:
     def get_run(self, run_id: str) -> PayrollRun:
         return self._get(self._runs, run_id, "Payroll run")
 
-    def list_runs(self, client_id: str) -> list[PayrollRun]:
-        runs = [r for r in self._runs.values() if r.client_id == client_id]
+    def list_runs(self, client_id: str, *, status: RunStatus | None = None,
+                  since: date | None = None, before: date | None = None) -> list[PayrollRun]:
+        runs = [r for r in self._runs.values() if r.client_id == client_id
+                and (status is None or r.status == status)
+                and (since is None or r.period >= since)
+                and (before is None or r.period < before)]
         return sorted(runs, key=lambda r: r.period)
+
+    def list_run_summaries(self, client_id: str) -> list[RunSummary]:
+        return [RunSummary(r.id, r.client_id, r.period, r.status, r.prepared_by, r.approved_by,
+                           r.locked_at, len(r.slips), r.total_gross, r.total_net,
+                           r.total_employer_cost)
+                for r in reversed(self.list_runs(client_id))]
+
+    def list_employee_payslips(self, client_id: str, code: str,
+                               status: RunStatus = RunStatus.LOCKED) -> list[tuple[str, date, Payslip]]:
+        runs = self.list_runs(client_id, status=status)
+        return [(r.id, r.period, r.slips[code]) for r in reversed(runs) if code in r.slips]
 
     def save_filing(self, filing: Filing) -> None:
         self._filings[filing.id] = filing

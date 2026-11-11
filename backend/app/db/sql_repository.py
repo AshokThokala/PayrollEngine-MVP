@@ -12,7 +12,7 @@ from decimal import Decimal
 from typing import Any, Iterator
 
 from ..domain import (AuditEvent, Client, EmployeeRecord, Filing, FilingStatus,
-                      PayrollRun, Role, RunStatus, StatutoryRule, User, UserStatus)
+                      PayrollRun, Role, RunStatus, RunSummary, StatutoryRule, User, UserStatus)
 from ..engine.models import Employee, Line, Payslip, SalaryStructure
 from ..repository import NotFound
 from .connection import Database
@@ -61,15 +61,13 @@ class SqlRepository:
 
     @contextmanager
     def _tx(self) -> Iterator["_Cursor"]:
-        conn = self.db.connect()
-        try:
-            yield _Cursor(conn.cursor(), self)
-            conn.commit()
-        except Exception:
-            conn.rollback()
-            raise
-        finally:
-            conn.close()
+        with self.db.session() as conn:
+            try:
+                yield _Cursor(conn.cursor(), self)
+                conn.commit()
+            except Exception:
+                conn.rollback()
+                raise
 
     # --- clients ------------------------------------------------------------------
     def add_client(self, client: Client) -> None:
@@ -232,11 +230,58 @@ class SqlRepository:
                 raise NotFound(f"Payroll run {run_id!r} not found")
             return self._load_run(c, row)
 
-    def list_runs(self, client_id: str) -> list[PayrollRun]:
+    def list_runs(self, client_id: str, *, status: RunStatus | None = None,
+                  since: date | None = None, before: date | None = None) -> list[PayrollRun]:
+        sql, args = f"SELECT {self._RUN_COLS} FROM payroll_runs WHERE client_id = ?", [client_id]
+        if status is not None:
+            sql, args = sql + " AND status = ?", args + [status.value]
+        if since is not None:
+            sql, args = sql + " AND period >= ?", args + [since]
+        if before is not None:
+            sql, args = sql + " AND period < ?", args + [before]
         with self._tx() as c:
-            rows = c.all(f"SELECT {self._RUN_COLS} FROM payroll_runs WHERE client_id = ?"
-                         " ORDER BY period", client_id)
+            rows = c.all(sql + " ORDER BY period", *args)
             return [self._load_run(c, r) for r in rows]
+
+    def list_run_summaries(self, client_id: str) -> list[RunSummary]:
+        with self._tx() as c:
+            rows = c.all(
+                "SELECT r.id, r.client_id, r.period, r.status, r.prepared_by, r.approved_by,"
+                " r.locked_at, COUNT(p.employee_code), COALESCE(SUM(p.gross), 0),"
+                " COALESCE(SUM(p.net_pay), 0), COALESCE(SUM(p.employer_cost), 0)"
+                " FROM payroll_runs r LEFT JOIN payslips p ON p.run_id = r.id"
+                " WHERE r.client_id = ?"
+                " GROUP BY r.id, r.client_id, r.period, r.status, r.prepared_by, r.approved_by, r.locked_at"
+                " ORDER BY r.period DESC", client_id)
+        return [RunSummary(rid, cid, _date(period), RunStatus(status), prep, appr, _dt(locked),
+                           int(n), _dec(g), _dec(net), _dec(cost))
+                for rid, cid, period, status, prep, appr, locked, n, g, net, cost in rows]
+
+    def list_employee_payslips(self, client_id: str, code: str,
+                               status: RunStatus = RunStatus.LOCKED) -> list[tuple[str, date, Payslip]]:
+        runs_of = "SELECT id FROM payroll_runs WHERE client_id = ? AND status = ?"
+        with self._tx() as c:
+            heads = c.all("SELECT p.run_id, r.period, p.period, p.statutory_wages FROM payslips p"
+                          " JOIN payroll_runs r ON r.id = p.run_id"
+                          " WHERE r.client_id = ? AND r.status = ? AND p.employee_code = ?"
+                          " ORDER BY r.period DESC", client_id, status.value, code)
+            lines: dict[tuple[str, str], list[Line]] = {}
+            for run_id, kind, lcode, label, amount, rule in c.all(
+                    "SELECT run_id, kind, code, label, amount, rule_version FROM payslip_lines"
+                    f" WHERE employee_code = ? AND run_id IN ({runs_of}) ORDER BY run_id, kind, seq",
+                    code, client_id, status.value):
+                lines.setdefault((run_id, kind), []).append(Line(lcode, label, _dec(amount), rule))
+            warnings: dict[str, list[str]] = {}
+            for run_id, msg in c.all(
+                    "SELECT run_id, message FROM payslip_warnings"
+                    f" WHERE employee_code = ? AND run_id IN ({runs_of}) ORDER BY run_id, seq",
+                    code, client_id, status.value):
+                warnings.setdefault(run_id, []).append(msg)
+        return [(run_id, _date(run_period),
+                 Payslip(code, _date(slip_period), lines.get((run_id, "earning"), []),
+                         lines.get((run_id, "deduction"), []), lines.get((run_id, "employer"), []),
+                         warnings.get(run_id, []), _dec(wages)))
+                for run_id, run_period, slip_period, wages in heads]
 
     # --- filings ---------------------------------------------------------------------
     _FILING_COLS = "id, client_id, kind, period, due_on, status, amount, challan_ref"

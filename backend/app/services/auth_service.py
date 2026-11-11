@@ -8,9 +8,10 @@ Roles
 from __future__ import annotations
 
 import uuid
+from datetime import date
 
 from .. import auth
-from ..domain import Client, PayrollRun, Role, RunStatus, User, UserStatus
+from ..domain import Client, Role, RunStatus, User, UserStatus
 from ..engine.models import Payslip
 from .payroll_service import PayrollService, ServiceError
 
@@ -60,7 +61,10 @@ class AuthService:
         """Create the first platform admin from ADMIN_EMAIL / ADMIN_PASSWORD if there are no users."""
         if not email or not password or self.repo.list_users():
             return None
-        return self.create_platform_admin(email, password)
+        try:
+            return self.create_platform_admin(email, password)
+        except (ServiceError, ValueError):
+            return None  # another worker created it at the same moment
 
     def signup_client(self, client: Client, name: str, email: str, password: str) -> User:
         """A business signs up: creates the client and its first admin login."""
@@ -150,11 +154,10 @@ class AuthService:
         client_id, code = self._own(actor)
         return self.repo.get_client(client_id), self.repo.get_employee(client_id, code)
 
-    def my_payslips(self, actor: User) -> list[tuple[PayrollRun, Payslip]]:
-        """Payslips from locked runs only - drafts are not final and are never shown."""
+    def my_payslips(self, actor: User) -> list[tuple[str, date, Payslip]]:
+        """(run id, period, payslip) from locked runs only, newest first - drafts are never shown."""
         client_id, code = self._own(actor)
-        runs = [r for r in self.repo.list_runs(client_id) if r.status == RunStatus.LOCKED and code in r.slips]
-        return [(r, r.slips[code]) for r in sorted(runs, key=lambda r: r.period, reverse=True)]
+        return self.repo.list_employee_payslips(client_id, code, RunStatus.LOCKED)
 
     def update_my_tax(self, actor: User, **profile):
         client_id, code = self._own(actor)
