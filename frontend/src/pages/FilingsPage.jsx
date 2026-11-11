@@ -10,7 +10,7 @@ const KIND_LABEL = {
   form_24q: 'Quarterly salary TDS return (Form 138; Form 24Q before Apr 2026)',
 }
 
-export default function FilingsPage({ clientId, clients }) {
+export default function FilingsPage({ clientId, clients, canSeeAll = false }) {
   const [allClients, setAllClients] = useState(false)
   const [filings, setFilings] = useState([])
   const [statusFilter, setStatusFilter] = useState('pending')
@@ -49,7 +49,7 @@ export default function FilingsPage({ clientId, clients }) {
       <div className="run-head">
         <h2>Compliance calendar</h2>
         <div className="actions">
-          <label className="check"><input type="checkbox" checked={allClients} onChange={(e) => setAllClients(e.target.checked)} /> All clients</label>
+          {canSeeAll && <label className="check"><input type="checkbox" checked={allClients} onChange={(e) => setAllClients(e.target.checked)} /> All clients</label>}
           <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
             <option value="pending">Pending</option>
             <option value="paid">Paid</option>

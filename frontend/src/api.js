@@ -1,28 +1,48 @@
 // Thin client for the FastAPI backend. All calls go through /api (proxied).
 const BASE = '/api'
 
-export function getUser() {
+// Login session: the token is kept in memory and, when the browser allows it, in
+// localStorage so a refresh keeps you signed in (tokens expire after 12 hours).
+const TOKEN_KEY = 'cp4u.session'
+let session = null
+let onLoggedOut = () => {}
+
+export function loadSession() {
   try {
-    return localStorage.getItem('payroll.user') || 'ops1'
+    session = JSON.parse(localStorage.getItem(TOKEN_KEY)) || null
   } catch {
-    return 'ops1'
+    session = null
+  }
+  return session
+}
+
+export function saveSession(next) {
+  session = next
+  try {
+    if (next) localStorage.setItem(TOKEN_KEY, JSON.stringify(next))
+    else localStorage.removeItem(TOKEN_KEY)
+  } catch {
+    // storage unavailable: the session lasts until the page is closed
   }
 }
 
-export function setUser(name) {
-  try {
-    localStorage.setItem('payroll.user', name)
-  } catch {
-    // storage unavailable: the name lasts for this page only
-  }
+export function whenLoggedOut(callback) {
+  onLoggedOut = callback
 }
 
 async function request(method, path, body) {
   const res = await fetch(BASE + path, {
     method,
-    headers: { 'Content-Type': 'application/json', 'X-User': getUser() },
+    headers: {
+      'Content-Type': 'application/json',
+      ...(session?.token ? { Authorization: `Bearer ${session.token}` } : {}),
+    },
     body: body === undefined ? undefined : JSON.stringify(body),
   })
+  if (res.status === 401 && session) {
+    saveSession(null)
+    onLoggedOut()
+  }
   if (!res.ok) {
     let message = `${res.status} ${res.statusText}`
     const fieldErrors = {}
@@ -46,6 +66,15 @@ async function request(method, path, body) {
 const enc = encodeURIComponent
 
 export const api = {
+  login: (email, password) => request('POST', '/auth/login', { email, password }),
+  signupClient: (body) => request('POST', '/auth/signup/client', body),
+  signupEmployee: (body) => request('POST', '/auth/signup/employee', body),
+  me: () => request('GET', '/auth/me'),
+  listUsers: () => request('GET', '/users'),
+  userAction: (userId, action) => request('POST', `/users/${enc(userId)}/${action}`),
+  myEmployee: () => request('GET', '/me/employee'),
+  myPayslips: () => request('GET', '/me/payslips'),
+  updateMyTax: (body) => request('PUT', '/me/tax', body),
   listClients: () => request('GET', '/clients'),
   createClient: (body) => request('POST', '/clients', body),
   listEmployees: (clientId) => request('GET', `/clients/${enc(clientId)}/employees`),

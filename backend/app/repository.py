@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from typing import Protocol
 
-from .domain import AuditEvent, Client, EmployeeRecord, Filing, PayrollRun, StatutoryRule
+from .domain import AuditEvent, Client, EmployeeRecord, Filing, PayrollRun, StatutoryRule, User
 
 
 class NotFound(LookupError):
@@ -37,6 +37,11 @@ class Repository(Protocol):
     def save_rule(self, rule: StatutoryRule) -> None: ...
     def list_rules(self) -> list[StatutoryRule]: ...
 
+    def save_user(self, user: User) -> None: ...
+    def get_user(self, user_id: str) -> User: ...
+    def find_user_by_email(self, email: str) -> User | None: ...
+    def list_users(self, client_id: str | None = None) -> list[User]: ...
+
 
 class InMemoryRepository:
     def __init__(self) -> None:
@@ -46,6 +51,7 @@ class InMemoryRepository:
         self._filings: dict[str, Filing] = {}
         self._audit: list[AuditEvent] = []
         self._rules: dict[str, StatutoryRule] = {}
+        self._users: dict[str, User] = {}
 
     @staticmethod
     def _get(store: dict, key, what: str):
@@ -105,3 +111,20 @@ class InMemoryRepository:
 
     def list_rules(self) -> list[StatutoryRule]:
         return sorted(self._rules.values(), key=lambda r: (r.scope, r.category, r.valid_from))
+
+    def save_user(self, user: User) -> None:
+        clash = self.find_user_by_email(user.email)
+        if clash and clash.id != user.id:
+            raise ValueError(f"A login for {user.email} already exists")
+        self._users[user.id] = user
+
+    def get_user(self, user_id: str) -> User:
+        return self._get(self._users, user_id, "User")
+
+    def find_user_by_email(self, email: str) -> User | None:
+        email = email.strip().lower()
+        return next((u for u in self._users.values() if u.email == email), None)
+
+    def list_users(self, client_id: str | None = None) -> list[User]:
+        users = [u for u in self._users.values() if client_id in (None, u.client_id)]
+        return sorted(users, key=lambda u: (u.client_id or "", u.role.value, u.email))

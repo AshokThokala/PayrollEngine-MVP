@@ -12,7 +12,7 @@ from decimal import Decimal
 from typing import Any, Iterator
 
 from ..domain import (AuditEvent, Client, EmployeeRecord, Filing, FilingStatus,
-                      PayrollRun, RunStatus, StatutoryRule)
+                      PayrollRun, Role, RunStatus, StatutoryRule, User, UserStatus)
 from ..engine.models import Employee, Line, Payslip, SalaryStructure
 from ..repository import NotFound
 from .connection import Database
@@ -300,6 +300,48 @@ class SqlRepository:
         return [StatutoryRule(scope, category, _date(vf), json.loads(params), _date(vt), source,
                               created_by, _dt(created_at))
                 for scope, category, vf, vt, params, source, created_by, created_at in rows]
+
+
+    # --- users ------------------------------------------------------------------------
+    _USER_COLS = ("id, email, name, role, password_hash, status, client_id, employee_code,"
+                  " created_at")
+
+    @staticmethod
+    def _user(row) -> User:
+        uid, email, name, role, pw, status, client_id, code, created_at = row
+        return User(uid, email, name, Role(role), pw, UserStatus(status), client_id, code, _dt(created_at))
+
+    def save_user(self, user: User) -> None:
+        with self._tx() as c:
+            clash = c.one("SELECT id FROM users WHERE email = ?", user.email)
+            if clash and clash[0] != user.id:
+                raise ValueError(f"A login for {user.email} already exists")
+            c.run("DELETE FROM users WHERE id = ?", user.id)
+            c.run(f"INSERT INTO users ({self._USER_COLS}) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                  user.id, user.email, user.name, user.role.value, user.password_hash,
+                  user.status.value, user.client_id, user.employee_code,
+                  user.created_at or datetime.now().astimezone())
+
+    def get_user(self, user_id: str) -> User:
+        with self._tx() as c:
+            row = c.one(f"SELECT {self._USER_COLS} FROM users WHERE id = ?", user_id)
+        if not row:
+            raise NotFound(f"User {user_id!r} not found")
+        return self._user(row)
+
+    def find_user_by_email(self, email: str) -> User | None:
+        with self._tx() as c:
+            row = c.one(f"SELECT {self._USER_COLS} FROM users WHERE email = ?", email.strip().lower())
+        return self._user(row) if row else None
+
+    def list_users(self, client_id: str | None = None) -> list[User]:
+        sql = f"SELECT {self._USER_COLS} FROM users"
+        args: tuple = ()
+        if client_id is not None:
+            sql, args = sql + " WHERE client_id = ?", (client_id,)
+        with self._tx() as c:
+            rows = c.all(sql + " ORDER BY client_id, role, email", *args)
+        return [self._user(r) for r in rows]
 
 
 class _Cursor:

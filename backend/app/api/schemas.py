@@ -155,3 +155,51 @@ class RuleCreated(BaseModel):
 class RuleEdit(BaseModel):
     params: dict
     source: str = ""
+
+
+class LoginIn(BaseModel):
+    email: str
+    password: str
+
+
+class UserOut(BaseModel):
+    id: str
+    email: str
+    name: str
+    role: str
+    status: str
+    client_id: str | None
+    employee_code: str | None
+    is_platform_admin: bool
+
+
+class LoginOut(BaseModel):
+    token: str
+    user: UserOut
+
+
+class ClientSignupIn(BaseModel):
+    client: ClientIn
+    name: str
+    email: str
+    password: str
+
+
+class EmployeeSignupIn(BaseModel):
+    client_id: str
+    employee_code: str
+    name: str
+    email: str
+    password: str
+
+
+class MeOut(BaseModel):
+    client_id: str
+    client_name: str
+    employee: EmployeeOut
+
+
+class MyPayslipOut(BaseModel):
+    run_id: str
+    period: date
+    payslip: PayslipOut

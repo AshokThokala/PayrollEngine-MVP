@@ -58,10 +58,13 @@ FIELD_LABELS = {
     # filings
     "status": "Status",
     "challan_ref": "Challan / ack reference",
-    "client_id": "Client",
+    "client_id": "Client ID",
+    "employee_code": "Employee code",
+    "email": "Email",
+    "password": "Password",
     "overdue_on": "Overdue on",
     # headers
-    "x-user": "Acting as",
+    "authorization": "Login",
 }
 
 COMPONENT_LABELS = {
@@ -98,6 +101,8 @@ TYPE_MESSAGES = {
 def label_for(loc: list[Any]) -> tuple[str, str]:
     """Map a Pydantic location like ['body', 'inputs', 'E1', 'paid_days'] to (field, label)."""
     parts = [str(p) for p in loc if p not in ("body", "query", "path", "header")]
+    if len(parts) > 1 and parts[0] == "client":  # client sign-up nests the client fields
+        parts = parts[1:]
     if not parts:
         return "", "Request"
     field = parts[0]
