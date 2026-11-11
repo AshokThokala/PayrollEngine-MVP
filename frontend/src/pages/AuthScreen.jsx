@@ -4,7 +4,7 @@ import { api } from '../api.js'
 const PERKS = [
   ['PF, ESI, PT, LWF and TDS', 'calculated every month under the Labour Codes and the Income-tax Act 2025'],
   ['Every due date tracked', 'challans and returns on a calendar, with overdue alerts'],
-  ['Maker-checker by design', 'a second person approves every payroll run'],
+  ['Review before you pay', 'every payroll run is approved, then locked'],
 ]
 
 export default function AuthScreen({ onLoggedIn }) {

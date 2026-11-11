@@ -51,8 +51,7 @@ def test_full_month_flow(client, ops, reviewer):
     assert [r["id"] for r in client.get("/clients/acme/runs", headers=ops).json()] == ["acme:2026-10"]
     assert client.get("/runs/acme%3A2026-10", headers=ops).json()["id"] == "acme:2026-10"
 
-    assert client.post(f"/runs/{run['id']}/approve", headers=ops).status_code == 409
-    assert client.post(f"/runs/{run['id']}/approve", headers=reviewer).status_code == 200
+    assert client.post(f"/runs/{run['id']}/approve", headers=ops).status_code == 200  # preparer may approve
     filings = client.post(f"/runs/{run['id']}/lock", headers=reviewer).json()
     assert {f["kind"] for f in filings} == {"pf", "tds_deposit", "pt"}
 

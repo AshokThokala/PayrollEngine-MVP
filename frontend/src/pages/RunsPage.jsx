@@ -7,7 +7,7 @@ function thisMonth() {
 }
 
 const STATUS_HELP = {
-  draft: 'Draft — review, then a different person approves',
+  draft: 'Draft — review, then approve',
   approved: 'Approved — lock to freeze it and schedule filings',
   locked: 'Locked — cannot be changed',
 }
@@ -146,8 +146,7 @@ export default function RunsPage({ client, user }) {
               </div>
               <div className="actions">
                 {selected.status === 'draft' && (
-                  <button className="primary" disabled={busy || user === selected.prepared_by}
-                    title={user === selected.prepared_by ? 'You prepared this run; a different admin must approve it' : ''}
+                  <button className="primary" disabled={busy}
                     onClick={() => act(() => api.approveRun(selected.id), 'Run approved.')}>
                     Approve
                   </button>

@@ -23,6 +23,7 @@ services:
       DATABASE_URL: postgresql://payroll:payroll@db:5432/payroll
       # Change these in a .env file next to this compose file - see backend/.env.example
       SECRET_KEY: ${SECRET_KEY:-dev-only-change-me}
+      REQUIRE_SEPARATE_APPROVER: ${REQUIRE_SEPARATE_APPROVER:-false}
       ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@clearpay4u.local}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:-ChangeMe123}
       WEB_CONCURRENCY: ${WEB_CONCURRENCY:-2}

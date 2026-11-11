@@ -70,7 +70,16 @@ def test_explicit_inputs_and_unknown_employee(repo):
         svc.create_draft("acme", date(2026, 10, 1), user="ops1", inputs={"E99": MonthInput()})
 
 
-def test_maker_checker_and_lock_rules(repo):
+def test_preparer_can_approve_own_run(repo, monkeypatch):
+    monkeypatch.delenv("REQUIRE_SEPARATE_APPROVER", raising=False)
+    svc = staffed(repo)
+    run = svc.create_draft("acme", date(2026, 10, 1), user="ops1")
+    assert svc.approve(run.id, user="ops1").approved_by == "ops1"
+    assert svc.repo.audit_log()[-1].detail == "approved by the preparer"
+
+
+def test_maker_checker_when_required_and_lock_rules(repo, monkeypatch):
+    monkeypatch.setenv("REQUIRE_SEPARATE_APPROVER", "true")
     svc = staffed(repo)
     run = svc.create_draft("acme", date(2026, 10, 1), user="ops1")
     with pytest.raises(ServiceError, match="Maker-checker"):

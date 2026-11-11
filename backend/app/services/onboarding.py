@@ -54,7 +54,7 @@ def client_checklist(payroll: PayrollService, client_id: str) -> dict:
                                                              if weak else "Add employees first"),
          "action": "employees"},
         {"key": "first_run", "title": "First payroll locked",
-         "description": "A month calculated, approved by a second person and locked.",
+         "description": "A month calculated, approved and locked.",
          "done": any(r.status == RunStatus.LOCKED for r in runs),
          "detail": next((f"{r.period:%B %Y}" for r in runs if r.status == RunStatus.LOCKED), "Not yet"),
          "action": "runs"},
