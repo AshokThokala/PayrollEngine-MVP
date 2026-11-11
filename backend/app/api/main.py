@@ -23,7 +23,7 @@ from ..services.compliance import overdue
 from . import errors
 from . import schemas as s
 
-app = FastAPI(title="Payroll + Compliance MVP", version="0.2.0")
+app = FastAPI(title="ClearPay4U API", description="ClearPay4U — zero-penalty payroll", version="0.3.0")
 
 
 @lru_cache
