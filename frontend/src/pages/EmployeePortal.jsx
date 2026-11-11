@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { api, money } from '../api.js'
+import MyOnboarding from '../components/MyOnboarding.jsx'
 import PayslipView from '../components/PayslipView.jsx'
 import TaxFields, { taxFromEmployee } from '../components/TaxFields.jsx'
 
@@ -69,6 +70,11 @@ export default function EmployeePortal({ user, onLogout }) {
         <h1 className="greeting">Hello, {user.name.split(' ')[0]}</h1>
         {message && <div className={`banner ${message.kind}`}>{message.text}</div>}
 
+        <MyOnboarding
+          readOnly={!!viewingAs}
+          onTaxStep={() => document.getElementById('tax-declarations')?.scrollIntoView({ behavior: 'smooth' })}
+        />
+
         <div className="stats">
           <div><span>Latest net pay</span><strong>{latest ? money(latest.net_pay) : '—'}</strong></div>
           <div><span>Gross</span><strong>{latest ? money(latest.gross) : '—'}</strong></div>
@@ -115,7 +121,7 @@ export default function EmployeePortal({ user, onLogout }) {
               </div>
             ))}
             {tax && (
-              <form className="form section" onSubmit={saveTax}>
+              <form className="form section" id="tax-declarations" onSubmit={saveTax}>
                 <h2>Income tax declarations</h2>
                 <p className="muted small">Choose your regime and declare your investments so the right tax is deducted each month.</p>
                 <fieldset className="plain" disabled={!!viewingAs}>

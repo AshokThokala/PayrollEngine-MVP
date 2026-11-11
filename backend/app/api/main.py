@@ -28,6 +28,7 @@ from ..services.compliance import overdue
 from ..services.reports import CATALOG, UnknownReport, run_report
 from ..services.billing import PLANS, BillingService
 from ..services.onboarding import all_clients, client_checklist
+from ..services.employee_onboarding import EmployeeOnboardingService
 from . import errors
 from . import schemas as s
 
@@ -50,9 +51,12 @@ def get_auth() -> AuthService:
     return auth
 
 
-@lru_cache
-def get_billing() -> BillingService:
-    return BillingService(get_service())
+def get_billing(svc: PayrollService = Depends(get_service)) -> BillingService:
+    return BillingService(svc)
+
+
+def get_employee_onboarding(auth: AuthService = Depends(get_auth)) -> EmployeeOnboardingService:
+    return EmployeeOnboardingService(auth)
 
 
 class NotLoggedIn(Exception):
@@ -553,3 +557,71 @@ def invoice_action(invoice_id: str, action: str, body: s.InvoicePayment | None =
             raise ServiceError("Enter the payment date and reference", field="reference")
         return _invoice_out(billing.mark_paid(invoice_id, actor.email, body.paid_on, body.reference))
     raise NotFound(f"Unknown action {action!r}")
+
+
+# --- employee invites, registration and onboarding --------------------------------------------
+
+@app.post("/clients/{client_id}/employees/{code}/invite", status_code=201)
+def invite_employee(client_id: str, code: str, body: s.InviteIn, actor: User = Depends(admin_user),
+                    eo: EmployeeOnboardingService = Depends(get_employee_onboarding)):
+    """Make a one-time registration link. The token is shown once; only its hash is stored."""
+    invite, token = eo.invite(actor, client_id, code, body.email)
+    return {"invite_id": invite.id, "email": invite.email, "expires_at": invite.expires_at,
+            "path": f"/invite/{token}"}
+
+
+@app.post("/invites/{invite_id}/revoke")
+def revoke_invite(invite_id: str, actor: User = Depends(admin_user),
+                  eo: EmployeeOnboardingService = Depends(get_employee_onboarding)):
+    eo.revoke(actor, invite_id)
+    return {"ok": True}
+
+
+@app.get("/invite/{token}")
+def invite_details(token: str, eo: EmployeeOnboardingService = Depends(get_employee_onboarding)):
+    """Public: what the registration page shows for a valid link."""
+    return eo.lookup(token)
+
+
+@app.post("/invite/{token}/accept", status_code=201, response_model=s.LoginOut)
+def accept_invite(token: str, body: s.InviteAcceptIn, auth: AuthService = Depends(get_auth),
+                  eo: EmployeeOnboardingService = Depends(get_employee_onboarding)):
+    """Public: the employee sets their name and password, and is logged in."""
+    user = eo.accept(token, body.name, body.password)
+    user, session_token = auth.login(user.email, body.password)
+    return s.LoginOut(token=session_token, user=_user_out(user))
+
+
+@app.get("/clients/{client_id}/employee-onboarding")
+def employee_onboarding_list(client_id: str, actor: User = Depends(admin_user),
+                             eo: EmployeeOnboardingService = Depends(get_employee_onboarding)):
+    return eo.status_list(actor, client_id)
+
+
+@app.get("/clients/{client_id}/employees/{code}/profile")
+def employee_profile(client_id: str, code: str, actor: User = Depends(admin_user),
+                     eo: EmployeeOnboardingService = Depends(get_employee_onboarding)):
+    return eo.profile_for_admin(actor, client_id, code)
+
+
+@app.post("/clients/{client_id}/employees/{code}/profile/{decision}")
+def review_profile(client_id: str, code: str, decision: str, body: s.ReviewIn | None = None,
+                   actor: User = Depends(admin_user),
+                   eo: EmployeeOnboardingService = Depends(get_employee_onboarding)):
+    if decision not in ("verify", "return"):
+        raise NotFound(f"Unknown decision {decision!r}")
+    return eo.review(actor, client_id, code, approve=decision == "verify", note=(body.note if body else ""))
+
+
+@app.get("/me/onboarding")
+def my_onboarding(user: User = Depends(employee_user),
+                  eo: EmployeeOnboardingService = Depends(get_employee_onboarding)):
+    return eo.my_profile(user)
+
+
+@app.put("/me/onboarding")
+def save_my_onboarding(body: s.ProfileIn, user: User = Depends(employee_user),
+                       eo: EmployeeOnboardingService = Depends(get_employee_onboarding)):
+    data = body.model_dump()
+    submit = data.pop("submit")
+    return eo.save_my_profile(user, data, submit=submit)

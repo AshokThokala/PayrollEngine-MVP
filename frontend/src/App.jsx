@@ -6,7 +6,9 @@ import BillingPage from './pages/BillingPage.jsx'
 import ClientOnboardingPage from './pages/ClientOnboardingPage.jsx'
 import ClientsPage from './pages/ClientsPage.jsx'
 import EmployeesPage from './pages/EmployeesPage.jsx'
+import EmployeeOnboardingPage from './pages/EmployeeOnboardingPage.jsx'
 import EmployeePortal from './pages/EmployeePortal.jsx'
+import InviteRegistration from './pages/InviteRegistration.jsx'
 import ReportsPage from './pages/ReportsPage.jsx'
 import FilingsPage from './pages/FilingsPage.jsx'
 import RulesPage from './pages/RulesPage.jsx'
@@ -45,6 +47,24 @@ export default function App() {
     else logout()
   }
 
+  // An invite link (/invite/<token>) opens the registration page, even if someone is logged in.
+  const inviteToken = window.location.pathname.match(/^\/invite\/([^/]+)/)?.[1]
+  if (inviteToken) {
+    return (
+      <InviteRegistration
+        token={decodeURIComponent(inviteToken)}
+        onDone={(next) => {
+          if (!next) {
+            window.location.assign('/')
+            return
+          }
+          window.history.replaceState(null, '', '/')
+          stashAdminSession(null)
+          onLoggedIn(next)
+        }}
+      />
+    )
+  }
   if (!session) return <AuthScreen onLoggedIn={onLoggedIn} />
   if (session.user.role === 'employee') {
     return <EmployeePortal user={session.user} onLogout={session.user.impersonated_by ? backToAdmin : logout} />
@@ -56,6 +76,7 @@ const NAV = [
   { id: 'clients', label: 'Clients', icon: '▦', platformOnly: true },
   { id: 'onboarding', label: 'Client onboarding', icon: '✓', needsClient: true },
   { id: 'employees', label: 'Employees', icon: '☺', needsClient: true },
+  { id: 'employee-onboarding', label: 'Employee onboarding', icon: '✉', needsClient: true },
   { id: 'runs', label: 'Payroll runs', icon: '₹', needsClient: true },
   { id: 'filings', label: 'Compliance calendar', icon: '◷' },
   { id: 'reports', label: 'Reports', icon: '▤', needsClient: true },
@@ -158,6 +179,7 @@ function AdminShell({ user, onLogout, onViewAs }) {
           {tab === 'runs' && client && <RunsPage client={client} user={user.email} />}
           {tab === 'filings' && <FilingsPage clientId={clientId} clients={clients} canSeeAll={platform} />}
           {tab === 'reports' && client && <ReportsPage client={client} />}
+          {tab === 'employee-onboarding' && client && <EmployeeOnboardingPage client={client} />}
           {tab === 'onboarding' && client && (
             <ClientOnboardingPage client={client} platform={platform} tabs={nav.map((n) => n.id)} onGo={setTab} onPickClient={setClientId} />
           )}

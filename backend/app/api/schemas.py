@@ -251,3 +251,33 @@ class InvoiceIn(BaseModel):
 class InvoicePayment(BaseModel):
     paid_on: date
     reference: str = ""
+
+
+class InviteIn(BaseModel):
+    email: str
+
+
+class InviteAcceptIn(BaseModel):
+    name: str
+    password: str
+
+
+class ReviewIn(BaseModel):
+    note: str = ""
+
+
+class ProfileIn(BaseModel):
+    phone: str = ""
+    date_of_birth: str = ""
+    address: str = ""
+    city: str = ""
+    pincode: str = ""
+    emergency_name: str = ""
+    emergency_phone: str = ""
+    uan: str = ""
+    esi_ip: str = ""
+    bank_name: str = ""
+    ifsc: str = ""
+    pan: str = ""
+    account_number: str = ""
+    submit: bool = False

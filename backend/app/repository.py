@@ -9,8 +9,8 @@ from datetime import date
 from decimal import Decimal
 from typing import Protocol
 
-from .domain import (AuditEvent, BillingPlan, Client, EmployeeRecord, Filing, Invoice, PayrollRun,
-                     RunStatus, RunSummary, StatutoryRule, User)
+from .domain import (AuditEvent, BillingPlan, Client, EmployeeProfile, EmployeeRecord, Filing, Invite, Invoice,
+                     PayrollRun, RunStatus, RunSummary, StatutoryRule, User)
 from .engine.models import Payslip
 
 
@@ -52,6 +52,13 @@ class Repository(Protocol):
     def save_invoice(self, invoice: Invoice) -> None: ...
     def get_invoice(self, invoice_id: str) -> Invoice: ...
     def list_invoices(self, client_id: str | None = None) -> list[Invoice]: ...
+    def save_invite(self, invite: Invite) -> None: ...
+    def get_invite(self, invite_id: str) -> Invite: ...
+    def find_invite_by_hash(self, token_hash: str) -> Invite | None: ...
+    def list_invites(self, client_id: str) -> list[Invite]: ...
+    def save_profile(self, profile: EmployeeProfile) -> None: ...
+    def get_profile(self, client_id: str, employee_code: str) -> EmployeeProfile | None: ...
+    def list_profiles(self, client_id: str) -> list[EmployeeProfile]: ...
     def get_user(self, user_id: str) -> User: ...
     def find_user_by_email(self, email: str) -> User | None: ...
     def list_users(self, client_id: str | None = None) -> list[User]: ...
@@ -66,6 +73,8 @@ class InMemoryRepository:
         self._audit: list[AuditEvent] = []
         self._rules: dict[str, StatutoryRule] = {}
         self._users: dict[str, User] = {}
+        self._invites: dict[str, Invite] = {}
+        self._profiles: dict[tuple[str, str], EmployeeProfile] = {}
         self._plans: dict[str, BillingPlan] = {}
         self._invoices: dict[str, Invoice] = {}
 
@@ -163,6 +172,30 @@ class InMemoryRepository:
     def list_users(self, client_id: str | None = None) -> list[User]:
         users = [u for u in self._users.values() if client_id in (None, u.client_id)]
         return sorted(users, key=lambda u: (u.client_id or "", u.role.value, u.email))
+
+    def save_invite(self, invite: Invite) -> None:
+        self.get_client(invite.client_id)
+        self._invites[invite.id] = invite
+
+    def get_invite(self, invite_id: str) -> Invite:
+        return self._get(self._invites, invite_id, "Invite")
+
+    def find_invite_by_hash(self, token_hash: str) -> Invite | None:
+        return next((i for i in self._invites.values() if i.token_hash == token_hash), None)
+
+    def list_invites(self, client_id: str) -> list[Invite]:
+        return sorted((i for i in self._invites.values() if i.client_id == client_id),
+                      key=lambda i: i.created_at, reverse=True)
+
+    def save_profile(self, profile: EmployeeProfile) -> None:
+        self.get_client(profile.client_id)
+        self._profiles[(profile.client_id, profile.employee_code)] = profile
+
+    def get_profile(self, client_id: str, employee_code: str) -> EmployeeProfile | None:
+        return self._profiles.get((client_id, employee_code))
+
+    def list_profiles(self, client_id: str) -> list[EmployeeProfile]:
+        return [p for (cid, _), p in sorted(self._profiles.items()) if cid == client_id]
 
     def save_billing_plan(self, plan: BillingPlan) -> None:
         self.get_client(plan.client_id)

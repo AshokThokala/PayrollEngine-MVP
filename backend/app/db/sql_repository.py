@@ -11,8 +11,8 @@ from datetime import date, datetime
 from decimal import Decimal
 from typing import Any, Iterator
 
-from ..domain import (AuditEvent, BillingPlan, Client, EmployeeRecord, Filing, FilingStatus, Invoice,
-                      InvoiceStatus, PayrollRun, Role, RunStatus, RunSummary, StatutoryRule, User,
+from ..domain import (AuditEvent, BillingPlan, Client, EmployeeProfile, EmployeeRecord, Filing, FilingStatus,
+                      Invite, Invoice, InvoiceStatus, PayrollRun, ProfileStatus, Role, RunStatus, RunSummary, StatutoryRule, User,
                       UserStatus)
 from ..engine.models import Employee, Line, Payslip, SalaryStructure
 from ..repository import NotFound
@@ -411,6 +411,68 @@ class SqlRepository:
             c.run(f"INSERT INTO billing_plans ({self._PLAN_COLS}) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
                   plan.client_id, plan.plan, plan.rate_per_employee, plan.minimum_fee,
                   plan.onboarding_fee, plan.gst_rate, plan.billing_email, plan.starts_on)
+
+    # --- invites and onboarding profiles ----------------------------------------------------
+    _INVITE_COLS = ("id, client_id, employee_code, email, token_hash, created_by, created_at, expires_at,"
+                    " accepted_at, revoked")
+    _PROFILE_COLS = ("client_id, employee_code, status, details, pan_enc, account_enc, submitted_at,"
+                     " verified_by, verified_at, note")
+
+    @staticmethod
+    def _invite(row) -> Invite:
+        iid, cid, code, email, th, by, created, expires, accepted, revoked = row
+        return Invite(iid, cid, code, email, th, by, _dt(created), _dt(expires), _dt(accepted), bool(revoked))
+
+    def save_invite(self, invite: Invite) -> None:
+        with self._tx() as c:
+            c.run("DELETE FROM invites WHERE id = ?", invite.id)
+            c.run(f"INSERT INTO invites ({self._INVITE_COLS}) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                  invite.id, invite.client_id, invite.employee_code, invite.email, invite.token_hash,
+                  invite.created_by, invite.created_at, invite.expires_at, invite.accepted_at, invite.revoked)
+
+    def get_invite(self, invite_id: str) -> Invite:
+        with self._tx() as c:
+            row = c.one(f"SELECT {self._INVITE_COLS} FROM invites WHERE id = ?", invite_id)
+        if not row:
+            raise NotFound(f"Invite {invite_id!r} not found")
+        return self._invite(row)
+
+    def find_invite_by_hash(self, token_hash: str) -> Invite | None:
+        with self._tx() as c:
+            row = c.one(f"SELECT {self._INVITE_COLS} FROM invites WHERE token_hash = ?", token_hash)
+        return self._invite(row) if row else None
+
+    def list_invites(self, client_id: str) -> list[Invite]:
+        with self._tx() as c:
+            rows = c.all(f"SELECT {self._INVITE_COLS} FROM invites WHERE client_id = ? ORDER BY created_at DESC",
+                         client_id)
+        return [self._invite(r) for r in rows]
+
+    @staticmethod
+    def _profile(row) -> EmployeeProfile:
+        cid, code, status, details, pan, acct, submitted, vby, vat, note = row
+        return EmployeeProfile(cid, code, ProfileStatus(status), json.loads(details), pan, acct,
+                               _dt(submitted), vby, _dt(vat), note or "")
+
+    def save_profile(self, p: EmployeeProfile) -> None:
+        with self._tx() as c:
+            c.run("DELETE FROM employee_profiles WHERE client_id = ? AND employee_code = ?",
+                  p.client_id, p.employee_code)
+            c.run(f"INSERT INTO employee_profiles ({self._PROFILE_COLS}) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                  p.client_id, p.employee_code, p.status.value, json.dumps(p.details, default=str),
+                  p.pan_enc, p.account_enc, p.submitted_at, p.verified_by, p.verified_at, p.note)
+
+    def get_profile(self, client_id: str, employee_code: str) -> EmployeeProfile | None:
+        with self._tx() as c:
+            row = c.one(f"SELECT {self._PROFILE_COLS} FROM employee_profiles"
+                        " WHERE client_id = ? AND employee_code = ?", client_id, employee_code)
+        return self._profile(row) if row else None
+
+    def list_profiles(self, client_id: str) -> list[EmployeeProfile]:
+        with self._tx() as c:
+            rows = c.all(f"SELECT {self._PROFILE_COLS} FROM employee_profiles WHERE client_id = ?"
+                         " ORDER BY employee_code", client_id)
+        return [self._profile(r) for r in rows]
 
     def get_billing_plan(self, client_id: str) -> BillingPlan | None:
         with self._tx() as c:

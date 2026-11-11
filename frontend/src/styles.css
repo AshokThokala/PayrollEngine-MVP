@@ -373,3 +373,23 @@ tfoot td { border-top: 2px solid var(--line); border-bottom: 0; background: #f7f
   .main-col, main, .grid, .stack, .card { display: block; padding: 0; margin: 0; border: 0; box-shadow: none; background: #fff; }
   .invoice { border: 0; padding: 0; }
 }
+
+/* --- employee invite and onboarding -------------------------------------------------------- */
+.segmented.small-seg { grid-template-columns: repeat(4, 1fr); margin-bottom: 14px; }
+.copy-link { display: flex; gap: 8px; }
+.copy-link input { flex: 1; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.8rem; }
+.steps-list { margin: 10px 0 0; padding-left: 20px; display: flex; flex-direction: column; gap: 10px; line-height: 1.5; }
+.onboarding-card { margin-bottom: 20px; border-color: #f1d9a0; }
+fieldset.plain.profile-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+.profile-grid .span-2 { grid-column: span 2; }
+@media (max-width: 640px) {
+  fieldset.plain.profile-grid { grid-template-columns: 1fr; }
+  .profile-grid .span-2 { grid-column: auto; }
+  .segmented.small-seg { grid-template-columns: repeat(2, 1fr); }
+}
+.stepper { list-style: none; display: flex; gap: 6px; padding: 0; margin: 14px 0 18px; flex-wrap: wrap; }
+.stepper li { flex: 1; min-width: 120px; }
+.stepper button { width: 100%; display: flex; align-items: center; gap: 8px; text-align: left; font-size: 0.82rem; padding: 8px 10px; }
+.stepper .step-no { flex: none; width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; background: #eef2f1; font-weight: 700; font-size: 0.75rem; }
+.stepper li.done .step-no { background: var(--ok); color: #fff; }
+.stepper li.current button { border-color: var(--brand); background: var(--brand-soft); font-weight: 600; }
