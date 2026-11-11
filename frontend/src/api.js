@@ -26,6 +26,26 @@ export function saveSession(next) {
   }
 }
 
+// While an admin views the portal as an employee, their own session is kept here.
+const ADMIN_KEY = 'cp4u.admin-session'
+
+export function stashAdminSession(adminSession) {
+  try {
+    if (adminSession) localStorage.setItem(ADMIN_KEY, JSON.stringify(adminSession))
+    else localStorage.removeItem(ADMIN_KEY)
+  } catch {
+    // storage unavailable: returning to admin will need a fresh login
+  }
+}
+
+export function stashedAdminSession() {
+  try {
+    return JSON.parse(localStorage.getItem(ADMIN_KEY)) || null
+  } catch {
+    return null
+  }
+}
+
 export function whenLoggedOut(callback) {
   onLoggedOut = callback
 }
@@ -76,6 +96,14 @@ export const api = {
   myPayslips: () => request('GET', '/me/payslips'),
   updateMyTax: (body) => request('PUT', '/me/tax', body),
   listClients: () => request('GET', '/clients'),
+  updateClient: (clientId, body) => request('PUT', `/clients/${enc(clientId)}`, body),
+  updateEmployee: (clientId, code, body) => request('PUT', `/clients/${enc(clientId)}/employees/${enc(code)}`, body),
+  viewAs: (clientId, code) => request('POST', `/clients/${enc(clientId)}/employees/${enc(code)}/view-as`),
+  reportCatalog: () => request('GET', '/reports'),
+  getReport: (clientId, key, params = {}) => {
+    const q = new URLSearchParams(Object.entries(params).filter(([, v]) => v)).toString()
+    return request('GET', `/clients/${enc(clientId)}/reports/${enc(key)}${q ? `?${q}` : ''}`)
+  },
   createClient: (body) => request('POST', '/clients', body),
   listEmployees: (clientId) => request('GET', `/clients/${enc(clientId)}/employees`),
   addEmployee: (clientId, body) => request('POST', `/clients/${enc(clientId)}/employees`, body),

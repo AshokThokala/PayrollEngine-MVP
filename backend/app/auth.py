@@ -58,22 +58,35 @@ def password_problem(password: str) -> str | None:
     return None
 
 
-def make_token(user_id: str, ttl: int = TOKEN_TTL_SECONDS, secret: str | None = None) -> str:
-    payload = _b64(json.dumps({"uid": user_id, "exp": int(time.time()) + ttl}).encode())
+VIEW_AS_TTL_SECONDS = 60 * 60  # "view as employee" sessions are short
+
+
+def make_token(user_id: str, ttl: int = TOKEN_TTL_SECONDS, secret: str | None = None,
+               view_as: tuple[str, str] | None = None) -> str:
+    data = {"uid": user_id, "exp": int(time.time()) + ttl}
+    if view_as:
+        data["as"] = list(view_as)  # [client_id, employee_code], read-only
+    payload = _b64(json.dumps(data).encode())
     sig = hmac.new((secret or _SECRET).encode(), payload.encode(), hashlib.sha256).digest()
     return f"{payload}.{_b64(sig)}"
 
 
-def read_token(token: str, secret: str | None = None) -> str | None:
-    """Return the user id in a valid, unexpired token, else None."""
+def read_token_data(token: str, secret: str | None = None) -> dict | None:
+    """The payload of a valid, unexpired token, else None."""
     try:
         payload, sig = token.split(".")
         expected = hmac.new((secret or _SECRET).encode(), payload.encode(), hashlib.sha256).digest()
         if not hmac.compare_digest(expected, _unb64(sig)):
             return None
         data = json.loads(_unb64(payload))
-        if data["exp"] < time.time():
+        if data["exp"] < time.time() or "uid" not in data:
             return None
-        return data["uid"]
+        return data
     except (ValueError, KeyError, TypeError):
         return None
+
+
+def read_token(token: str, secret: str | None = None) -> str | None:
+    """Return the user id in a valid, unexpired token, else None."""
+    data = read_token_data(token, secret)
+    return data["uid"] if data else None

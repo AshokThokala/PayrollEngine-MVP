@@ -25,6 +25,7 @@ from ..db import make_repository
 from ..repository import NotFound
 from ..services import AccessDenied, AuthService, MonthInput, PayrollService, ServiceError
 from ..services.compliance import overdue
+from ..services.reports import CATALOG, UnknownReport, run_report
 from . import errors
 from . import schemas as s
 
@@ -116,6 +117,7 @@ def _employee_out(r: EmployeeRecord) -> s.EmployeeOut:
     return s.EmployeeOut(code=r.code, name=e.name, joined_on=r.joined_on,
                          exited_on=r.exited_on, components=r.structure.components,
                          monthly_total=r.structure.total,
+                         flags={k: getattr(e, k) for k in PayrollService.EMPLOYEE_FLAGS},
                          tax=s.TaxProfile(tax_regime=e.tax_regime, tax_age_group=e.tax_age_group,
                                           metro_city=e.metro_city, parents_senior=e.parents_senior,
                                           declarations=e.tax_declarations))
@@ -167,6 +169,14 @@ def create_client(body: s.ClientIn, user: User = Depends(platform_admin),
     return body
 
 
+@app.put("/clients/{client_id}")
+def update_client(client_id: str, body: s.ClientUpdate, actor: User = Depends(admin_user),
+                  svc: PayrollService = Depends(get_service), auth: AuthService = Depends(get_auth)):
+    """Edit a client's details. ID and state are fixed."""
+    auth.check_client(actor, client_id)
+    return svc.update_client(client_id, body.model_dump(exclude_none=True), actor.email).__dict__
+
+
 @app.get("/clients")
 def list_clients(user: User = Depends(admin_user), svc: PayrollService = Depends(get_service)):
     return [c.__dict__ for c in svc.repo.list_clients() if user.can_manage(c.id)]
@@ -197,6 +207,24 @@ def list_employees(client_id: str, actor: User = Depends(admin_user),
     auth.check_client(actor, client_id)
     svc.repo.get_client(client_id)
     return [_employee_out(r) for r in svc.repo.list_employees(client_id)]
+
+
+@app.put("/clients/{client_id}/employees/{code}", response_model=s.EmployeeCreated)
+def update_employee(client_id: str, code: str, body: s.EmployeeUpdate, actor: User = Depends(admin_user),
+                    svc: PayrollService = Depends(get_service), auth: AuthService = Depends(get_auth)):
+    """Edit name, statutory settings and salary (a salary change is kept as a new version)."""
+    auth.check_client(actor, client_id)
+    warnings = svc.update_employee(client_id, code, actor.email, name=body.name,
+                                   components=body.components, flags=body.flags)
+    return s.EmployeeCreated(employee=_employee_out(svc.repo.get_employee(client_id, code)), warnings=warnings)
+
+
+@app.post("/clients/{client_id}/employees/{code}/view-as", response_model=s.LoginOut)
+def view_as_employee(client_id: str, code: str, actor: User = Depends(admin_user),
+                     auth: AuthService = Depends(get_auth)):
+    """A one-hour, read-only session showing the employee portal as this employee sees it."""
+    viewer, token = auth.view_as(actor, client_id, code)
+    return s.LoginOut(token=token, user=_user_out(viewer))
 
 
 @app.put("/clients/{client_id}/employees/{code}/tax", response_model=s.EmployeeOut)
@@ -350,7 +378,7 @@ def edit_rule(rule_id: str, body: s.RuleEdit, actor: User = Depends(platform_adm
 def _user_out(u: User) -> s.UserOut:
     return s.UserOut(id=u.id, email=u.email, name=u.name, role=u.role.value, status=u.status.value,
                      client_id=u.client_id, employee_code=u.employee_code,
-                     is_platform_admin=u.is_platform_admin)
+                     is_platform_admin=u.is_platform_admin, impersonated_by=u.impersonated_by)
 
 
 @app.post("/auth/login", response_model=s.LoginOut)
@@ -419,3 +447,22 @@ def update_my_tax(body: s.TaxProfile, user: User = Depends(employee_user),
                                 metro_city=body.metro_city, parents_senior=body.parents_senior,
                                 declarations=body.declarations)
     return _employee_out(record)
+
+
+# --- reports -----------------------------------------------------------------------------
+
+@app.get("/reports")
+def report_catalog(actor: User = Depends(admin_user)):
+    return CATALOG
+
+
+@app.get("/clients/{client_id}/reports/{key}")
+def get_report(client_id: str, key: str, month: date | None = None, fy: int | None = Query(None, ge=2000, le=2100),
+               actor: User = Depends(admin_user), svc: PayrollService = Depends(get_service),
+               auth: AuthService = Depends(get_auth)):
+    auth.check_client(actor, client_id)
+    svc.repo.get_client(client_id)
+    try:
+        return run_report(svc.repo, client_id, key, month=month, fy=fy, today=svc.clock().date())
+    except UnknownReport as exc:
+        raise NotFound(str(exc)) from exc

@@ -52,6 +52,7 @@ class EmployeeOut(BaseModel):
     exited_on: date | None
     components: dict[str, Decimal]
     monthly_total: Decimal
+    flags: dict[str, bool | None] = {}
     tax: TaxProfile
 
 
@@ -184,6 +185,7 @@ class UserOut(BaseModel):
     client_id: str | None
     employee_code: str | None
     is_platform_admin: bool
+    impersonated_by: str | None = None
 
 
 class LoginOut(BaseModel):
@@ -216,3 +218,18 @@ class MyPayslipOut(BaseModel):
     run_id: str
     period: date
     payslip: PayslipOut
+
+
+class ClientUpdate(BaseModel):
+    legal_name: str | None = None
+    pan: str | None = None
+    tan: str | None = None
+    pf_code: str | None = None
+    esi_code: str | None = None
+    pt_registration: str | None = None
+
+
+class EmployeeUpdate(BaseModel):
+    name: str | None = None
+    components: dict[str, Amount] | None = None
+    flags: dict[str, bool | None] | None = None

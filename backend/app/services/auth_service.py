@@ -110,14 +110,37 @@ class AuthService:
         return user, auth.make_token(user.id)
 
     def user_from_token(self, token: str | None) -> User | None:
-        uid = auth.read_token(token) if token else None
-        if uid is None:
+        data = auth.read_token_data(token) if token else None
+        if data is None:
             return None
         try:
-            user = self.repo.get_user(uid)
+            user = self.repo.get_user(data["uid"])
         except LookupError:
             return None
-        return user if user.status == UserStatus.ACTIVE else None
+        if user.status != UserStatus.ACTIVE:
+            return None
+        if "as" in data:  # an admin viewing as an employee: re-check access on every request
+            client_id, code = data["as"]
+            if not user.can_manage(client_id):
+                return None
+            try:
+                record = self.repo.get_employee(client_id, code)
+            except LookupError:
+                return None
+            return User(id=f"{user.id}:as:{client_id}/{code}", email=user.email, name=record.employee.name,
+                        role=Role.EMPLOYEE, password_hash="", status=UserStatus.ACTIVE,
+                        client_id=client_id, employee_code=code, impersonated_by=user.email)
+        return user
+
+    def view_as(self, actor: User, client_id: str, code: str) -> tuple[User, str]:
+        """Let an admin see the employee portal exactly as one employee sees it (read-only)."""
+        if actor.role != Role.ADMIN or actor.impersonated_by:
+            raise AccessDenied("Admins only")
+        self.check_client(actor, client_id)
+        record = self.repo.get_employee(client_id, code)
+        token = auth.make_token(actor.id, ttl=auth.VIEW_AS_TTL_SECONDS, view_as=(client_id, code))
+        self.payroll._audit(actor.email, "user.view_as", f"{client_id}/{code}", record.employee.name)
+        return self.user_from_token(token), token
 
     # --- admin actions --------------------------------------------------------------
     def check_client(self, actor: User, client_id: str) -> None:
@@ -161,4 +184,6 @@ class AuthService:
 
     def update_my_tax(self, actor: User, **profile):
         client_id, code = self._own(actor)
+        if actor.impersonated_by:
+            raise AccessDenied("Read-only while viewing as an employee; edit tax details from the Employees page")
         return self.payroll.update_tax_profile(client_id, code, actor.email, **profile)

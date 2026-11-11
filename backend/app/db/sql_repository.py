@@ -87,6 +87,15 @@ class SqlRepository:
             raise NotFound(f"Client {client_id!r} not found")
         return Client(*row)
 
+    def update_client(self, client: Client) -> None:
+        with self._tx() as c:
+            if not c.one("SELECT 1 FROM clients WHERE id = ?", client.id):
+                raise NotFound(f"Client {client.id!r} not found")
+            c.run("UPDATE clients SET legal_name = ?, state = ?, pan = ?, tan = ?, pf_code = ?,"
+                  " esi_code = ?, pt_registration = ? WHERE id = ?",
+                  client.legal_name, client.state, client.pan, client.tan, client.pf_code,
+                  client.esi_code, client.pt_registration, client.id)
+
     def list_clients(self) -> list[Client]:
         with self._tx() as c:
             rows = c.all("SELECT id, legal_name, state, pan, tan, pf_code, esi_code,"
