@@ -157,3 +157,48 @@ def monthly_tds(current_month_gross: Decimal, fy_month_index: int,
     months_left = 12 - fy_month_index + 1
     projected = ytd_gross + current_month_gross * months_left
     return monthly_from_annual(annual_tax_new_regime(projected, rule), ytd_tds, months_left)
+
+
+# --- explained calculation (Tax rules page calculator) --------------------------------
+
+def slab_breakdown(income: Decimal, slabs: list[dict]) -> list[dict]:
+    """Tax in each band: [{'from', 'upto', 'rate', 'taxed', 'tax'}]."""
+    rows, lower = [], ZERO
+    for slab in slabs:
+        upper = None if slab["upto"] is None else D(slab["upto"])
+        top = income if upper is None else min(income, upper)
+        taxed = max(ZERO, top - lower)
+        rows.append({"from": lower, "upto": upper, "rate": D(slab["rate"]), "taxed": rupee(taxed),
+                     "tax": rupee(taxed * D(slab["rate"]))})
+        if upper is None or income <= upper:
+            break
+        lower = upper
+    return rows
+
+
+def explain(regime: str, salary: AnnualSalary, rule: Rule, **profile) -> dict:
+    """Every step of the year's tax: deductions, slabs, rebate, surcharge, cess, monthly TDS."""
+    age_group = profile.get("age_group", "below_60")
+    taxable, items = taxable_income(regime, salary, rule, **profile)
+    slabs = rule[AGE_SLABS.get(age_group, "slabs_below_60")] if regime == "old" else rule["slabs"]
+    on_slabs = slab_tax(taxable, slabs)
+    if regime == "old":
+        def base(x):
+            return _old_regime_tax(x, rule, age_group)
+    else:
+        def base(x):
+            return _new_regime_tax(x, rule)
+    after_rebate = base(taxable)
+    with_sur = with_surcharge(taxable, after_rebate, base, rule.data.get("surcharge_slabs"))
+    total = annual_tax(regime, taxable, rule, age_group)
+    rebate, surcharge = rupee(on_slabs - after_rebate), rupee(with_sur - after_rebate)
+    return {
+        "regime": regime, "rule_version": rule.version, "gross": rupee(salary.gross),
+        "deductions": [{"label": k, "amount": v} for k, v in items],
+        "total_deductions": sum((v for _, v in items), ZERO), "taxable_income": rupee(taxable),
+        "slabs": slab_breakdown(taxable, slabs), "tax_on_slabs": rupee(on_slabs),
+        "rebate": rebate, "surcharge": surcharge,
+        "cess": total - rupee(on_slabs) + rebate - surcharge, "total_tax": total,
+        "monthly_tds": rupee(total / 12),
+        "effective_rate": (total / salary.gross).quantize(Decimal("0.0001")) if salary.gross else ZERO,
+    }

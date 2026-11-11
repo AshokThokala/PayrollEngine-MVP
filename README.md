@@ -51,6 +51,11 @@ A payroll run must be approved by a different admin from the one who calculated 
   account and IFSC), then submit. The admin checks the details and *Verifies* them or *Sends back* with a note.
   PAN and account numbers are encrypted at rest (Fernet; key from `FIELD_ENCRYPTION_KEY`, or derived from
   `SECRET_KEY` - keep it stable). Only a SHA-256 hash of each invite token is stored.
+- **Tax rules** (all admins; editing for platform admins): income tax for the Tax Year in force on any date -
+  new-regime and old-regime slabs (old by age group), standard deduction, rebate, surcharge and cess, old-regime
+  deduction limits (80C, 80CCD(1B), 80D, home loan, HRA formula), TDS deposit and Form 24Q due dates, and the version
+  history. *Compare regimes* works out a year's tax under both regimes step by step (deductions, each slab, rebate,
+  surcharge, cess, monthly TDS) and shows which is lower. *Change* opens that rule on the Compliance rules page.
 - **Client onboarding**: a 7-step checklist per client (company details, statutory registrations, client admin
   login, billing plan, employees, salary structures, first locked payroll) with a progress bar and a *Go* button to
   the page that finishes each step. Platform admins also see every client, least complete first.

@@ -393,3 +393,22 @@ fieldset.plain.profile-grid { display: grid; grid-template-columns: repeat(2, mi
 .stepper .step-no { flex: none; width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; background: #eef2f1; font-weight: 700; font-size: 0.75rem; }
 .stepper li.done .step-no { background: var(--ok); color: #fff; }
 .stepper li.current button { border-color: var(--brand); background: var(--brand-soft); font-weight: 600; }
+
+/* --- tax rules ------------------------------------------------------------------------------ */
+.tax-head { display: flex; justify-content: space-between; align-items: flex-end; gap: 16px; flex-wrap: wrap; }
+.regime-compare { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; align-items: start; }
+@media (max-width: 900px) { .regime-compare { grid-template-columns: 1fr; } }
+.slab-table { margin: 10px 0 4px; }
+.slab-table caption { text-align: left; font-weight: 600; padding-bottom: 6px; }
+.segmented.three { grid-template-columns: repeat(3, 1fr); margin: 10px 0 4px; }
+.calc-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 12px 14px; }
+.calc-grid label.check { align-self: end; padding-bottom: 8px; }
+h3.sub { margin: 6px 0 0; font-size: 0.95rem; }
+.verdict { margin-top: 18px; font-size: 0.95rem; }
+.regime-result { border: 1px solid #e3e9e7; border-radius: 12px; padding: 16px; background: #fff; }
+.regime-result.best { border-color: var(--ok); box-shadow: 0 0 0 3px var(--ok-soft); }
+.regime-result h3 { margin: 0; }
+.big-number { font-family: 'Poppins', sans-serif; font-size: 1.5rem; font-weight: 600; margin: 6px 0 10px; }
+.regime-result tr.subtotal td { border-top: 1px solid #e3e9e7; font-weight: 600; }
+.regime-result tr.total td { border-top: 2px solid var(--ink, #1b2a38); font-weight: 700; }
+.regime-result tr.muted td { color: var(--muted); }

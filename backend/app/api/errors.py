@@ -69,6 +69,14 @@ FIELD_LABELS = {
     "ifsc": "IFSC",
     "account_number": "Bank account number",
     "note": "Note",
+    # tax calculator
+    "annual_gross": "Yearly gross salary",
+    "basic_da": "Yearly basic + DA",
+    "hra_received": "Yearly HRA received",
+    "professional_tax": "Professional tax paid",
+    "employee_pf": "Employee PF",
+    "age_group": "Age group",
+    "on": "Date",
     # billing
     "plan": "Plan",
     "rate_per_employee": "Rate per employee",

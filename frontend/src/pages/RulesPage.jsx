@@ -64,12 +64,12 @@ function summary(type, value) {
 
 // ---- page ------------------------------------------------------------------------
 
-export default function RulesPage() {
+export default function RulesPage({ initialCategory }) {
   const [categories, setCategories] = useState([])
   const [states, setStates] = useState([])
   const [rules, setRules] = useState([])
   const [filter, setFilter] = useState('all')
-  const [category, setCategory] = useState('pf')
+  const [category, setCategory] = useState(initialCategory || 'pf')
   const [scope, setScope] = useState('central')
   const [validFrom, setValidFrom] = useState(today())
   const [values, setValues] = useState({})
