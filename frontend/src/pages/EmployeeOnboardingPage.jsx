@@ -61,7 +61,13 @@ export default function EmployeeOnboardingPage({ client }) {
     try {
       const res = await api.inviteEmployee(client.id, row.employee_code, email)
       setLink(`${window.location.origin}${res.path}`)
-      setNotice(`Invite link made for ${row.name}. Copy it and send it to ${res.email}; it works once, for 7 days.`)
+      if (res.email_sent) {
+        setNotice(`Invite emailed to ${res.email}. The link works once, for 7 days.`)
+        setError('')
+      } else {
+        setNotice('')
+        setError(`Invite made, but the email was not sent: ${res.email_error}. Copy the link below and send it to ${res.email}.`)
+      }
       await load()
     } catch (err) {
       setErrors(err.fieldErrors || {})
@@ -92,8 +98,9 @@ export default function EmployeeOnboardingPage({ client }) {
   async function review(decision) {
     setErrors({})
     try {
-      await api.reviewProfile(client.id, row.employee_code, decision, note)
-      setNotice(decision === 'verify' ? `${row.name}'s details are verified.` : `Sent back to ${row.name} with your note.`)
+      const res = await api.reviewProfile(client.id, row.employee_code, decision, note)
+      const mail = res.email?.sent ? ` We emailed ${res.email.to}.` : res.email ? ' (The email could not be sent.)' : ''
+      setNotice((decision === 'verify' ? `${row.name}'s details are verified.` : `Sent back to ${row.name} with your note.`) + mail)
       await load()
     } catch (e) {
       setErrors(e.fieldErrors || {})
@@ -144,7 +151,7 @@ export default function EmployeeOnboardingPage({ client }) {
             <>
               <h2>How it works</h2>
               <ol className="steps-list">
-                <li><strong>Invite</strong> — make a link for their email</li>
+                <li><strong>Invite</strong> — we email them a sign-up link</li>
                 <li><strong>Register</strong> — they set a password</li>
                 <li><strong>Onboard</strong> — they submit contact, PAN, UAN and bank</li>
                 <li><strong>Verify</strong> — you approve or send back</li>
@@ -163,7 +170,7 @@ export default function EmployeeOnboardingPage({ client }) {
               {['not_invited', 'invited', 'invite_expired'].includes(row.stage) && (
                 <form className="form" onSubmit={invite}>
                   {row.stage === 'invited' && (
-                    <p className="muted small">Invite sent to {row.email}, valid until {fmt(row.invite_expires_at)}. Making a new one cancels the old link.</p>
+                    <p className="muted small">Invited {row.email}, valid until {fmt(row.invite_expires_at)}. A new invite cancels the old link.</p>
                   )}
                   <label>
                     Employee's email
@@ -171,7 +178,7 @@ export default function EmployeeOnboardingPage({ client }) {
                     {errors.email && <span className="field-error">Email: {errors.email}</span>}
                   </label>
                   <div className="actions">
-                    <button className="primary" type="submit">{row.stage === 'not_invited' ? 'Make invite link' : 'Make a new link'}</button>
+                    <button className="primary" type="submit">{row.stage === 'not_invited' ? 'Send invite' : 'Send a new invite'}</button>
                     {row.invite_id && row.stage === 'invited' && <button type="button" onClick={revoke}>Cancel invite</button>}
                   </div>
                   {link && (
@@ -180,7 +187,7 @@ export default function EmployeeOnboardingPage({ client }) {
                       <button type="button" onClick={copy}>Copy</button>
                     </div>
                   )}
-                  <p className="muted small">ClearPay4U does not send emails yet: send the link yourself (email, WhatsApp). The link is shown only once.</p>
+                  <p className="muted small">We email the invite link. It is also shown here once, to copy if needed.</p>
                 </form>
               )}
 

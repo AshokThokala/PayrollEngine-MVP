@@ -250,6 +250,7 @@ def test_employee_invite_and_onboarding_api(client, ops):
         "code": "E1", "name": "Ravi", "joined_on": "2026-04-01", "components": {"basic": 30000}})
     inv = client.post("/clients/acme/employees/E1/invite", headers=ops, json={"email": "ravi@acme.in"})
     assert inv.status_code == 201 and inv.json()["path"].startswith("/invite/")
+    assert inv.json()["email_sent"] is False and inv.json()["email_error"]  # no SMTP server in tests
     token = inv.json()["path"].split("/")[-1]
     assert client.get(f"/invite/{token}").json()["employee_name"] == "Ravi"
     r = client.post(f"/invite/{token}/accept", json={"name": "Ravi K", "password": "short"})

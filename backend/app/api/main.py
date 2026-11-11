@@ -29,6 +29,7 @@ from ..services.reports import CATALOG, UnknownReport, run_report
 from ..services.billing import PLANS, BillingService
 from ..services.onboarding import all_clients, client_checklist
 from ..services.employee_onboarding import EmployeeOnboardingService
+from ..mailer import SmtpMailer, app_url
 from ..services import tax as tax_rules
 from ..services.search import search as run_search
 from . import errors
@@ -57,8 +58,16 @@ def get_billing(svc: PayrollService = Depends(get_service)) -> BillingService:
     return BillingService(svc)
 
 
-def get_employee_onboarding(auth: AuthService = Depends(get_auth)) -> EmployeeOnboardingService:
-    return EmployeeOnboardingService(auth)
+@lru_cache
+def get_mailer():
+    return SmtpMailer()
+
+
+def get_employee_onboarding(request: Request, auth: AuthService = Depends(get_auth),
+                            mailer=Depends(get_mailer)) -> EmployeeOnboardingService:
+    # Links in emails use APP_URL, or else the address the browser is using (Origin header).
+    base = app_url() or request.headers.get("origin", "")
+    return EmployeeOnboardingService(auth, mailer, base)
 
 
 class NotLoggedIn(Exception):
@@ -566,10 +575,10 @@ def invoice_action(invoice_id: str, action: str, body: s.InvoicePayment | None =
 @app.post("/clients/{client_id}/employees/{code}/invite", status_code=201)
 def invite_employee(client_id: str, code: str, body: s.InviteIn, actor: User = Depends(admin_user),
                     eo: EmployeeOnboardingService = Depends(get_employee_onboarding)):
-    """Make a one-time registration link. The token is shown once; only its hash is stored."""
-    invite, token = eo.invite(actor, client_id, code, body.email)
+    """Make a one-time registration link and email it. The token is shown once; only its hash is stored."""
+    invite, token, delivery = eo.invite(actor, client_id, code, body.email)
     return {"invite_id": invite.id, "email": invite.email, "expires_at": invite.expires_at,
-            "path": f"/invite/{token}"}
+            "path": f"/invite/{token}", "email_sent": delivery["sent"], "email_error": delivery["error"]}
 
 
 @app.post("/invites/{invite_id}/revoke")

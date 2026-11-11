@@ -49,8 +49,9 @@ admin (maker-checker).
 - **Reports**: salary register, statutory dues by month, payroll cost trend (with chart), compliance status and
   income tax summary - each with totals and *Download CSV*.
 - **Employee onboarding**: invite → register → onboard → verify. Pick an employee, enter their email and
-  *Make invite link*; copy the link (it works once, for 7 days; a new link cancels the old one) and send it yourself -
-  there is no email service yet. The employee opens `/invite/<token>`, sets a password and is logged in straight away.
+  *Send invite*: we email them a one-time sign-up link (7 days; a new invite cancels the old link). The link is also
+  shown once to copy, in case email is not set up or fails. Emails also go out when an employee submits (to the
+  client's admins) and when an admin sends details back or verifies them (to the employee). The employee opens `/invite/<token>`, sets a password and is logged in straight away.
   In the portal they fill in *Joining details* in steps (contact and emergency contact; PAN, UAN, ESI IP; salary bank
   account and IFSC), then submit. The admin checks the details and *Verifies* them or *Sends back* with a note.
   PAN and account numbers are encrypted at rest (Fernet; key from `FIELD_ENCRYPTION_KEY`, or derived from
@@ -97,6 +98,15 @@ admin (maker-checker).
 
 Not yet covered: perquisites, employer NPS (80CCD(2)), income from other sources or a previous employer.
 
+
+## Email
+
+Invites and onboarding updates are sent over SMTP (`backend/app/mailer.py`, standard library only). With Docker
+Compose every email lands in **Mailpit** - open http://localhost:8025 to read them. For real delivery set `SMTP_HOST`,
+`SMTP_PORT`, `SMTP_SECURITY` (`starttls`, `ssl` or `none`), `SMTP_USER`, `SMTP_PASSWORD`, `SMTP_FROM` and `APP_URL`
+(the web address used in links) - see `backend/.env.example`. Any SMTP provider works (Amazon SES, SendGrid, Zoho,
+Google Workspace). Email never blocks a step: if sending fails, the app says so, shows the link to copy, and writes
+`email.failed` to the audit log.
 
 ## Scaling
 
