@@ -77,6 +77,7 @@ export default function RulesPage() {
   const [fieldErrors, setFieldErrors] = useState({})
   const [message, setMessage] = useState(null)
   const [busy, setBusy] = useState(false)
+  const [editing, setEditing] = useState(null) // a rule version being corrected
 
   const load = useCallback(async () => {
     try {
@@ -102,16 +103,32 @@ export default function RulesPage() {
       .sort((a, b) => b.valid_from.localeCompare(a.valid_from))[0],
     [rules, category, scope],
   )
+  const base = editing || latest
   useEffect(() => {
     if (!spec) return
     const v = {}
     spec.fields.forEach((f) => {
-      v[f.key] = toDisplay(f.type, latest?.params[f.key])
+      v[f.key] = toDisplay(f.type, base?.params[f.key])
       if (f.type.endsWith('slabs') && v[f.key].length === 0) v[f.key] = [{ upto: '', value: '' }]
     })
     setValues(v)
     setFieldErrors({})
-  }, [spec, latest])
+  }, [spec, base])
+
+  const startEdit = (rule) => {
+    setEditing(rule)
+    setCategory(rule.category)
+    setScope(rule.scope)
+    setValidFrom(rule.valid_from)
+    setSource(rule.source)
+    setMessage(null)
+  }
+
+  const cancelEdit = () => {
+    setEditing(null)
+    setSource('')
+    setValidFrom(today())
+  }
 
   const chooseCategory = (c) => {
     setCategory(c)
@@ -131,6 +148,15 @@ export default function RulesPage() {
     const params = {}
     spec.fields.forEach((f) => { params[f.key] = toParam(f.type, values[f.key]) })
     try {
+      if (editing) {
+        await api.editRule(editing.id, { params, source })
+        setMessage({ kind: 'ok', text: `Updated ${spec.label} version from ${editing.valid_from}. Drafts calculated from now on use the new values; locked runs keep theirs.` })
+        setEditing(null)
+        setSource('')
+        setValidFrom(today())
+        load()
+        return
+      }
       const res = await api.createRule({ scope, category, valid_from: validFrom, params, source })
       setMessage({
         kind: 'ok',
@@ -188,7 +214,10 @@ export default function RulesPage() {
                       <li key={f.key}><span className="muted">{f.label}:</span> {summary(f.type, r.params[f.key])}</li>
                     ))}
                   </ul>
-                  <div className="muted small">Source: {r.source || '—'} · added by {r.created_by}</div>
+                  <div className="muted small">
+                    Source: {r.source || '—'} · added by {r.created_by}
+                    {' · '}<button type="button" className="link" onClick={() => startEdit(r)}>Edit</button>
+                  </div>
                 </div>
               ))}
             </div>
@@ -197,12 +226,19 @@ export default function RulesPage() {
       </section>
 
       <section className="card allow-overflow">
-        <h2>Add rule version</h2>
+        <h2>{editing ? 'Edit rule version' : 'Add rule version'}</h2>
+        {editing && (
+          <div className="banner warn">
+            Correcting the version that starts {editing.valid_from}. Use this to fix a mistake.
+            For a change in the law from a new date, add a new version instead.
+            {' '}<button type="button" className="link" onClick={cancelEdit}>Cancel editing</button>
+          </div>
+        )}
         {message && <div className={`banner ${message.kind}`}>{message.text}</div>}
         {spec && (
           <form onSubmit={submit} className="form">
             <label>Rule type
-              <select value={category} onChange={(e) => chooseCategory(e.target.value)}>
+              <select value={category} onChange={(e) => chooseCategory(e.target.value)} disabled={!!editing}>
                 {categories.map((c) => <option key={c.category} value={c.category}>{c.label}</option>)}
               </select>
             </label>
@@ -211,22 +247,24 @@ export default function RulesPage() {
                 {spec.scope === 'central' ? (
                   <input value="All India (central)" disabled />
                 ) : (
-                  <select value={scope} onChange={(e) => setScope(e.target.value)}>
+                  <select value={scope} onChange={(e) => setScope(e.target.value)} disabled={!!editing}>
                     {states.map((s) => <option key={s.code} value={s.code}>{s.name}{s.supported ? '' : ' (no rules yet)'}</option>)}
                   </select>
                 )}
                 {fieldErrors.scope && <span className="field-error">{fieldErrors.scope}</span>}
               </label>
               <label>Effective from
-                <input type="date" required value={validFrom} onChange={(e) => setValidFrom(e.target.value)}
+                <input type="date" required value={validFrom} onChange={(e) => setValidFrom(e.target.value)} disabled={!!editing}
                   className={fieldErrors.valid_from ? 'invalid' : undefined} />
                 {fieldErrors.valid_from && <span className="field-error">Effective from: {fieldErrors.valid_from}</span>}
               </label>
             </div>
             <p className="muted small">
-              {latest
-                ? `Pre-filled from the version in force since ${latest.valid_from}. It will end the day before your new date.`
-                : 'No earlier version for this rule — this will be the first.'}
+              {editing
+                ? `Dates stay ${editing.valid_from} → ${editing.valid_to || 'in force'}; only the values and source change.`
+                : latest
+                  ? `Pre-filled from the version in force since ${latest.valid_from}. It will end the day before your new date.`
+                  : 'No earlier version for this rule — this will be the first.'}
             </p>
 
             {spec.fields.map((f) => (
@@ -239,7 +277,7 @@ export default function RulesPage() {
               <input value={source} onChange={(e) => setSource(e.target.value)} className={fieldErrors.source ? 'invalid' : undefined} />
               {fieldErrors.source && <span className="field-error">Source: {fieldErrors.source}</span>}
             </label>
-            <button className="primary" disabled={busy}>{busy ? 'Saving…' : 'Save rule version'}</button>
+            <button className="primary" disabled={busy}>{busy ? 'Saving…' : editing ? 'Save changes' : 'Save rule version'}</button>
           </form>
         )}
       </section>

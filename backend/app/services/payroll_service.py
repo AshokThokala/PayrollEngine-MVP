@@ -19,11 +19,15 @@ from ..domain import (AuditEvent, Client, EmployeeRecord, Filing, FilingStatus, 
 from ..engine import PayInputs, RuleBook, SalaryStructure, compute_payslip
 from ..engine.money import D
 from ..engine.payroll import month_end
+from ..engine.tds import DECLARATION_KEYS
 from ..engine.wages import check_structure
 from ..repository import Repository
 from .compliance import filings_for_run
 
 VARIANCE_THRESHOLD = Decimal("0.10")
+YTD_KEYS = ("ytd_taxable_gross", "ytd_tds", "ytd_basic_da", "ytd_hra", "ytd_pt", "ytd_pf")
+TAX_REGIMES = ("new", "old")
+AGE_GROUPS = ("below_60", "60_to_80", "80_plus")
 
 
 class ServiceError(ValueError):
@@ -68,16 +72,96 @@ class PayrollService:
 
     # --- compliance rules ------------------------------------------------------
     def ensure_rules_seeded(self, user: str = "system") -> int:
-        """Load the default rules (app/rules/*.json) into an empty rules table."""
-        if self.repo.list_rules():
-            return 0
-        count = 0
+        """Bring the default rules (app/rules/*.json) into the rules table, safely.
+
+        - Adds default versions that are missing, unless someone already added a version
+          for that rule starting on the same date or later (theirs wins).
+        - Closes the previous open version the day before an added default version.
+        - Fills in values missing from an existing version (e.g. a new field); never
+          overwrites a value that is already there.
+        Returns the number of rows added or filled.
+        """
+        existing = {r.id: r for r in self.repo.list_rules()}
+        changes = 0
         for scope, category, vf, vt, params, source in RuleBook.load().default_records():
-            self.repo.save_rule(StatutoryRule(scope, category, vf, params, vt, source,
-                                              created_by=user, created_at=self.clock()))
-            count += 1
-        self._audit(user, "rules.seed", "statutory_rules", f"{count} default rules")
-        return count
+            rule_id = f"{scope}:{category}:{vf.isoformat()}"
+            if rule_id in existing:
+                current = existing[rule_id]
+                missing = {k: v for k, v in params.items() if k not in current.params}
+                if missing:
+                    current.params = {**current.params, **missing}
+                    self.repo.save_rule(current)
+                    changes += 1
+                continue
+            versions = [r for r in existing.values() if r.scope == scope and r.category == category]
+            if any(r.valid_from >= vf for r in versions):
+                continue
+            previous = max(versions, key=lambda r: r.valid_from) if versions else None
+            if previous and (previous.valid_to is None or previous.valid_to >= vf):
+                previous.valid_to = vf - timedelta(days=1)
+                self.repo.save_rule(previous)
+            rule = StatutoryRule(scope, category, vf, params, vt, source,
+                                 created_by=user, created_at=self.clock())
+            self.repo.save_rule(rule)
+            existing[rule.id] = rule
+            changes += 1
+        if changes:
+            self._audit(user, "rules.seed", "statutory_rules", f"{changes} default rule rows added or filled")
+        return changes
+
+    def edit_rule(self, rule_id: str, params: dict, source: str, user: str) -> StatutoryRule:
+        """Correct the values or source of an existing version (dates stay as they are)."""
+        rule = next((r for r in self.repo.list_rules() if r.id == rule_id), None)
+        if rule is None:
+            raise LookupError(f"Rule {rule_id!r} not found")
+        cleaned, errors = rule_schemas.validate(rule.category, rule.scope, params)
+        if not source.strip():
+            errors["source"] = "Enter the notification, circular or act this comes from"
+        if errors:
+            raise ServiceError("Check the highlighted fields", errors=errors)
+        changed = sorted(k for k in set(cleaned) | set(rule.params) if cleaned.get(k) != rule.params.get(k))
+        if source.strip() != rule.source:
+            changed.append("source")
+        if not changed:
+            return rule
+        rule.params, rule.source = cleaned, source.strip()
+        self.repo.save_rule(rule)
+        self._audit(user, "rule.edit", rule.id, "changed: " + ", ".join(changed))
+        return rule
+
+    def update_tax_profile(self, client_id: str, code: str, user: str, *, regime: str,
+                           age_group: str, metro_city: bool, parents_senior: bool,
+                           declarations: dict) -> EmployeeRecord:
+        """Save an employee's regime choice and old-regime declarations for TDS."""
+        errors = {}
+        if regime not in TAX_REGIMES:
+            errors["tax_regime"] = "Choose new or old"
+        if age_group not in AGE_GROUPS:
+            errors["tax_age_group"] = "Choose below 60, 60 to 79, or 80 and above"
+        cleaned = {}
+        for key, value in (declarations or {}).items():
+            if key not in DECLARATION_KEYS:
+                errors[key] = "Unknown declaration"
+                continue
+            try:
+                amount = D(value if value not in ("", None) else 0)
+            except Exception:  # noqa: BLE001 - any parse failure is a user input error
+                errors[key] = "Enter an amount"
+                continue
+            if amount < 0:
+                errors[key] = "Must be 0 or more"
+            elif amount:
+                cleaned[key] = str(amount)
+        if errors:
+            raise ServiceError("Check the highlighted fields", errors=errors)
+        record = self.repo.get_employee(client_id, code)
+        e = record.employee
+        e.tax_regime, e.tax_age_group = regime, age_group
+        e.metro_city, e.parents_senior, e.tax_declarations = metro_city, parents_senior, cleaned
+        self.repo.save_employee(record)
+        self._audit(user, "employee.tax", f"{client_id}/{code}",
+                    f"{regime} regime, {age_group}, declarations: {', '.join(sorted(cleaned)) or 'none'}")
+        return record
 
     def add_rule(self, scope: str, category: str, valid_from: date, params: dict,
                  source: str, user: str) -> tuple[StatutoryRule, StatutoryRule | None]:
@@ -186,14 +270,14 @@ class PayrollService:
         for record in sorted(active, key=lambda r: r.code):
             mi = inputs.get(record.code, MonthInput())
             paid = D(mi.paid_days) if mi.paid_days is not None else _default_paid_days(record, end)
-            gross_ytd, tds_ytd = ytd.get(record.code, (Decimal(0), Decimal(0)))
+            year_to_date = ytd.get(record.code, {})
             slip = compute_payslip(
                 record.employee, record.structure,
                 PayInputs(period=end, days_in_month=days, paid_days=paid,
                           overtime=mi.overtime, other_earnings=mi.other_earnings,
                           other_deductions=mi.other_deductions,
                           fy_month_index=fy_month_index(end),
-                          ytd_taxable_gross=gross_ytd, ytd_tds=tds_ytd),
+                          **year_to_date),
                 rules,
             )
             run.slips[record.code] = slip
@@ -253,14 +337,20 @@ class PayrollService:
         earlier = [r for r in self._locked_runs(client_id) if r.period < end]
         return earlier[-1] if earlier else None
 
-    def _ytd(self, client_id: str, end: date) -> dict[str, tuple[Decimal, Decimal]]:
+    def _ytd(self, client_id: str, end: date) -> dict[str, dict[str, Decimal]]:
+        """Year-to-date totals per employee from locked runs earlier in the same FY."""
         start = fy_start(end)
-        totals: dict[str, tuple[Decimal, Decimal]] = {}
+        totals: dict[str, dict[str, Decimal]] = {}
         for run in self._locked_runs(client_id):
             if start <= run.period < end:
                 for code, slip in run.slips.items():
-                    g, t = totals.get(code, (Decimal(0), Decimal(0)))
-                    totals[code] = (g + slip.gross, t + slip.amount("tds"))
+                    t = totals.setdefault(code, {k: Decimal(0) for k in YTD_KEYS})
+                    t["ytd_taxable_gross"] += slip.gross
+                    t["ytd_tds"] += slip.amount("tds")
+                    t["ytd_basic_da"] += slip.amount("basic") + slip.amount("da")
+                    t["ytd_hra"] += slip.amount("hra")
+                    t["ytd_pt"] += slip.amount("pt")
+                    t["ytd_pf"] += slip.amount("pf_employee")
         return totals
 
 

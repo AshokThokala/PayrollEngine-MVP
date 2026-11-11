@@ -44,6 +44,17 @@ FIELD_LABELS = {
     "category": "Rule type",
     "source": "Source",
     "params": "Rule values",
+    # income tax profile
+    "tax_regime": "Tax regime",
+    "tax_age_group": "Age group",
+    "metro_city": "Metro city",
+    "parents_senior": "Parents 60+",
+    "rent_paid": "Rent paid (₹/year)",
+    "sec_80c": "80C investments (₹/year)",
+    "sec_80ccd_1b": "80CCD(1B) NPS (₹/year)",
+    "sec_80d_self": "80D self/family (₹/year)",
+    "sec_80d_parents": "80D parents (₹/year)",
+    "home_loan_interest": "Home loan interest (₹/year)",
     # filings
     "status": "Status",
     "challan_ref": "Challan / ack reference",

@@ -136,3 +136,5 @@ details summary { cursor: pointer; color: var(--accent); font-size: 0.9rem; }
 .rule-dates { font-weight: 600; font-size: 0.9rem; margin-bottom: 4px; }
 .rule-values { list-style: none; margin: 0 0 4px; padding: 0; font-size: 0.85rem; display: flex; flex-direction: column; gap: 2px; }
 table.slabs input { width: 120px; }
+
+.stack { display: flex; flex-direction: column; gap: 20px; min-width: 0; }

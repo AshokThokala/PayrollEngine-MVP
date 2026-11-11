@@ -36,7 +36,13 @@ class Employee:
     esi_covered: bool | None = None  # None = decide from wages
     pt_applicable: bool = True
     lwf_applicable: bool = True
-    tax_regime: str = "new"
+    tax_regime: str = "new"  # "new" (default) or "old"
+    tax_age_group: str = "below_60"  # below_60, 60_to_80, 80_plus (old-regime slabs, 80D)
+    metro_city: bool = False  # HRA exemption share (old regime)
+    parents_senior: bool = False  # 80D parents limit
+    # Annual amounts declared for the old regime: rent_paid, sec_80c, sec_80ccd_1b,
+    # sec_80d_self, sec_80d_parents, home_loan_interest
+    tax_declarations: dict = field(default_factory=dict)
 
 
 @dataclass
@@ -53,12 +59,18 @@ class PayInputs:
     fy_month_index: int = 1  # April = 1 ... March = 12
     ytd_taxable_gross: Decimal = ZERO  # gross paid in earlier months of this FY
     ytd_tds: Decimal = ZERO
+    ytd_basic_da: Decimal = ZERO  # for HRA exemption
+    ytd_hra: Decimal = ZERO
+    ytd_pt: Decimal = ZERO
+    ytd_pf: Decimal = ZERO
 
     def __post_init__(self):
         self.paid_days = D(self.paid_days)
         self.overtime = D(self.overtime)
         self.ytd_taxable_gross = D(self.ytd_taxable_gross)
         self.ytd_tds = D(self.ytd_tds)
+        for name in ("ytd_basic_da", "ytd_hra", "ytd_pt", "ytd_pf"):
+            setattr(self, name, D(getattr(self, name)))
         self.other_earnings = {k: D(v) for k, v in self.other_earnings.items()}
         self.other_deductions = {k: D(v) for k, v in self.other_deductions.items()}
         if not 0 <= self.paid_days <= self.days_in_month:

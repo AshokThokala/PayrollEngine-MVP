@@ -7,7 +7,7 @@ const KIND_LABEL = {
   tds_deposit: 'TDS deposit',
   pt: 'Professional tax',
   lwf: 'Labour welfare fund',
-  form_24q: 'Form 24Q (quarterly TDS return)',
+  form_24q: 'Quarterly salary TDS return (Form 138; Form 24Q before Apr 2026)',
 }
 
 export default function FilingsPage({ clientId, clients }) {

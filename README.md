@@ -36,7 +36,23 @@ docker compose down -v            # stop and DELETE all data
    Enter the challan reference and mark them paid or filed. Overdue items are highlighted.
 5. **Compliance rules** - every statutory rule with its dated versions. *Add rule version* to change a rate,
    slab or due date from a given date (the previous version ends the day before), or add Professional Tax /
-   LWF rules for a new state so clients can be created there.
+   LWF rules for a new state so clients can be created there. *Edit* on any version corrects its values or
+   source (dates stay; recorded in the audit log).
+6. **Income tax** - on Employees, *Edit* in the Tax column sets the regime (new is default, or old), age group
+   and old-regime declarations (rent, 80C, 80CCD(1B), 80D, home loan interest). Monthly TDS projects the year,
+   applies slabs, rebate, surcharge with marginal relief and 4% cess, and spreads the rest over the months left.
+
+### Income tax coverage (Tax Year 2026-27, Income-tax Act 2025 s.392)
+| | New regime (default) | Old regime |
+| --- | --- | --- |
+| Slabs | 0 / 5 / 10 / 15 / 20 / 25 / 30% | By age: below 60, 60-79, 80+ |
+| Standard deduction | ₹75,000 | ₹50,000 |
+| Rebate | Up to ₹60,000 (income ≤ ₹12 lakh) with marginal relief | Up to ₹12,500 (income ≤ ₹5 lakh) |
+| Surcharge | 10 / 15 / 25% (cap) with marginal relief | 10 / 15 / 25 / 37% with marginal relief |
+| Deductions | - | Professional tax (≤ ₹2,500), HRA, 80C incl. employee PF, 80CCD(1B), 80D, home loan interest |
+| Cess | 4% | 4% |
+
+Not yet covered: perquisites, employer NPS (80CCD(2)), income from other sources or a previous employer.
 
 "Acting as" is a placeholder for real login; it is recorded in the audit log.
 

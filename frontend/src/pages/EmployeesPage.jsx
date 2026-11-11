@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { api, money, today } from '../api.js'
+import TaxFields, { EMPTY_TAX, taxFromEmployee } from '../components/TaxFields.jsx'
 
 const COMPONENTS = [
   ['basic', 'Basic'],
@@ -25,6 +26,9 @@ export default function EmployeesPage({ client }) {
   const [message, setMessage] = useState(null)
   const [exiting, setExiting] = useState({})
   const [fieldErrors, setFieldErrors] = useState({})
+  const [tax, setTax] = useState(EMPTY_TAX)
+  const [taxEdit, setTaxEdit] = useState(null) // { code, name, value }
+  const [taxErrors, setTaxErrors] = useState({})
 
   const load = useCallback(async () => {
     try {
@@ -64,6 +68,7 @@ export default function EmployeesPage({ client }) {
         pf_member: form.pf_member,
         pt_applicable: form.pt_applicable,
         esi_covered: form.esi === 'auto' ? null : form.esi === 'yes',
+        tax,
       })
       setMessage(
         res.warnings.length
@@ -71,9 +76,24 @@ export default function EmployeesPage({ client }) {
           : { kind: 'ok', text: `${form.name} added.` },
       )
       setForm(EMPTY)
+      setTax(EMPTY_TAX)
       load()
     } catch (err) {
       setFieldErrors(err.fieldErrors || {})
+      setMessage({ kind: 'error', text: err.message })
+    }
+  }
+
+  const saveTax = async (e) => {
+    e.preventDefault()
+    setTaxErrors({})
+    try {
+      await api.updateTax(client.id, taxEdit.code, taxEdit.value)
+      setMessage({ kind: 'ok', text: `Tax details saved for ${taxEdit.name}. Recalculate the month's draft to update TDS.` })
+      setTaxEdit(null)
+      load()
+    } catch (err) {
+      setTaxErrors(err.fieldErrors || {})
       setMessage({ kind: 'error', text: err.message })
     }
   }
@@ -101,7 +121,7 @@ export default function EmployeesPage({ client }) {
         ) : (
           <table>
             <thead>
-              <tr><th>Code</th><th>Name</th><th>Joined</th><th>Exited</th><th className="num">Monthly pay</th><th>Exit</th></tr>
+              <tr><th>Code</th><th>Name</th><th>Joined</th><th>Exited</th><th className="num">Monthly pay</th><th>Tax</th><th>Exit</th></tr>
             </thead>
             <tbody>
               {employees.map((emp) => (
@@ -111,6 +131,10 @@ export default function EmployeesPage({ client }) {
                   <td>{emp.joined_on}</td>
                   <td>{emp.exited_on || '—'}</td>
                   <td className="num">{money(emp.monthly_total)}</td>
+                  <td>
+                    <span className="tag">{emp.tax?.tax_regime === 'old' ? 'Old regime' : 'New regime'}</span>
+                    {' '}<button className="link" onClick={() => { setTaxErrors({}); setTaxEdit({ code: emp.code, name: emp.name, value: taxFromEmployee(emp) }) }}>Edit</button>
+                  </td>
                   <td>
                     {!emp.exited_on && (
                       <span className="inline">
@@ -127,7 +151,21 @@ export default function EmployeesPage({ client }) {
         )}
       </section>
 
-      <section className="card">
+      <div className="stack">
+      {taxEdit && (
+        <section className="card allow-overflow">
+          <h2>Income tax — {taxEdit.name} ({taxEdit.code})</h2>
+          <form onSubmit={saveTax} className="form">
+            <TaxFields value={taxEdit.value} errors={taxErrors}
+              onChange={(v) => setTaxEdit({ ...taxEdit, value: v })} />
+            <div className="inline">
+              <button className="primary">Save tax details</button>
+              <button type="button" onClick={() => setTaxEdit(null)}>Cancel</button>
+            </div>
+          </form>
+        </section>
+      )}
+      <section className="card allow-overflow">
         <h2>Add employee</h2>
         <form onSubmit={submit} className="form">
           <div className="row">
@@ -164,9 +202,14 @@ export default function EmployeesPage({ client }) {
             <label className="check"><input type="checkbox" checked={form.pf_member} onChange={set('pf_member')} /> PF member</label>
             <label className="check"><input type="checkbox" checked={form.pt_applicable} onChange={set('pt_applicable')} /> Professional tax</label>
           </div>
+          <details>
+            <summary>Income tax (regime and declarations)</summary>
+            <TaxFields value={tax} onChange={setTax} errors={fieldErrors} />
+          </details>
           <button className="primary" disabled={total <= 0}>Add employee</button>
         </form>
       </section>
+      </div>
     </div>
   )
 }

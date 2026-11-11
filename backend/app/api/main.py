@@ -48,8 +48,11 @@ async def _not_found(_: Request, exc: NotFound):
 async def _rejected(_: Request, exc: ServiceError):
     if exc.errors:  # several fields at once (rule validation)
         category = getattr(exc, "category", "")
-        return JSONResponse(status_code=422, content=errors.from_field_errors(
-            exc.errors, lambda k: rule_schemas.field_label(category, k)))
+
+        def label(key: str) -> str:
+            found = rule_schemas.field_label(category, key) if category else key
+            return found if found != key else errors.FIELD_LABELS.get(key, key)
+        return JSONResponse(status_code=422, content=errors.from_field_errors(exc.errors, label))
     return JSONResponse(status_code=409, content=errors.from_service(str(exc), exc.field))
 
 
@@ -60,9 +63,13 @@ async def _invalid(_: Request, exc: RequestValidationError):
 
 
 def _employee_out(r: EmployeeRecord) -> s.EmployeeOut:
-    return s.EmployeeOut(code=r.code, name=r.employee.name, joined_on=r.joined_on,
+    e = r.employee
+    return s.EmployeeOut(code=r.code, name=e.name, joined_on=r.joined_on,
                          exited_on=r.exited_on, components=r.structure.components,
-                         monthly_total=r.structure.total)
+                         monthly_total=r.structure.total,
+                         tax=s.TaxProfile(tax_regime=e.tax_regime, tax_age_group=e.tax_age_group,
+                                          metro_city=e.metro_city, parents_senior=e.parents_senior,
+                                          declarations=e.tax_declarations))
 
 
 def _lines(lines) -> list[s.LineOut]:
@@ -122,6 +129,12 @@ def add_employee(client_id: str, body: s.EmployeeIn, user: str = Depends(current
     record = EmployeeRecord(client_id, Employee(code=body.code, name=body.name, **flags),
                             SalaryStructure(body.components), body.joined_on)
     warnings = svc.add_employee(record, user)
+    if body.tax:
+        record = svc.update_tax_profile(client_id, body.code, user, regime=body.tax.tax_regime,
+                                        age_group=body.tax.tax_age_group,
+                                        metro_city=body.tax.metro_city,
+                                        parents_senior=body.tax.parents_senior,
+                                        declarations=body.tax.declarations)
     return s.EmployeeCreated(employee=_employee_out(record), warnings=warnings)
 
 
@@ -129,6 +142,17 @@ def add_employee(client_id: str, body: s.EmployeeIn, user: str = Depends(current
 def list_employees(client_id: str, svc: PayrollService = Depends(get_service)):
     svc.repo.get_client(client_id)
     return [_employee_out(r) for r in svc.repo.list_employees(client_id)]
+
+
+@app.put("/clients/{client_id}/employees/{code}/tax", response_model=s.EmployeeOut)
+def update_tax_profile(client_id: str, code: str, body: s.TaxProfile,
+                       user: str = Depends(current_user), svc: PayrollService = Depends(get_service)):
+    """Regime choice and old-regime declarations used for monthly TDS."""
+    record = svc.update_tax_profile(client_id, code, user, regime=body.tax_regime,
+                                    age_group=body.tax_age_group, metro_city=body.metro_city,
+                                    parents_senior=body.parents_senior,
+                                    declarations=body.declarations)
+    return _employee_out(record)
 
 
 @app.post("/clients/{client_id}/employees/{code}/exit", status_code=204)
@@ -227,3 +251,18 @@ def create_rule(body: s.RuleIn, user: str = Depends(current_user),
         exc.category = body.category
         raise
     return s.RuleCreated(rule=_rule_out(rule), closed=_rule_out(closed) if closed else None)
+
+
+@app.put("/rules/{rule_id}", response_model=s.RuleOut)
+def edit_rule(rule_id: str, body: s.RuleEdit, user: str = Depends(current_user),
+              svc: PayrollService = Depends(get_service)):
+    """Correct the values or source of an existing version. Dates do not change."""
+    category = rule_id.split(":")[1] if rule_id.count(":") == 2 else ""
+    try:
+        rule = svc.edit_rule(rule_id, body.params, body.source, user)
+    except LookupError as exc:
+        raise NotFound(str(exc)) from exc
+    except ServiceError as exc:
+        exc.category = category
+        raise
+    return _rule_out(rule)
