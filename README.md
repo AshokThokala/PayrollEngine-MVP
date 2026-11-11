@@ -64,6 +64,13 @@ A payroll run must be approved by a different admin from the one who calculated 
 Not yet covered: perquisites, employer NPS (80CCD(2)), income from other sources or a previous employer.
 
 
+## Theme
+"Clear books": **navy** `#0f2a3a` for trust (sidebar, headers), **emerald** `#0b7a63` for primary actions and
+"paid / compliant" states, and a small **saffron** `#e8a317` accent (logo, active item, portal header line).
+Headings use **Poppins** (Indian Type Foundry; also covers Devanagari), body text and numbers use **Inter** with
+tabular figures so rupee amounts line up. Fonts are bundled with the app (no Google Fonts requests).
+All colours are CSS variables at the top of `frontend/src/styles.css`; every text/background pair meets WCAG AA.
+
 ## Frontend development (without Docker)
 ```
 cd frontend
