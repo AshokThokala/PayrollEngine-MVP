@@ -53,6 +53,34 @@ class RuleBook:
         }
         return cls(central, states)
 
+    @classmethod
+    def from_records(cls, records) -> "RuleBook":
+        """Build from rule rows (objects with scope, category, valid_from, valid_to, params, source)."""
+        central: dict[str, list] = {}
+        states: dict[str, dict[str, list]] = {}
+        for r in sorted(records, key=lambda r: (r.scope, r.category, r.valid_from)):
+            entry = {**r.params,
+                     "valid_from": r.valid_from.isoformat(),
+                     "valid_to": r.valid_to.isoformat() if r.valid_to else None,
+                     "source": r.source}
+            book = central if r.scope == "central" else states.setdefault(r.scope, {})
+            book.setdefault(r.category, []).append(entry)
+        return cls(central, states)
+
+    def default_records(self):
+        """This rule book as (scope, category, valid_from, valid_to, params, source) tuples."""
+        meta = {"valid_from", "valid_to", "source"}
+        books = [("central", self._central)] + sorted(self._states.items())
+        for scope, book in books:
+            for category, entries in book.items():
+                if category.startswith("_") or not isinstance(entries, list):
+                    continue
+                for e in entries:
+                    params = {k: v for k, v in e.items() if k not in meta}
+                    yield (scope, category, date.fromisoformat(e["valid_from"]),
+                           date.fromisoformat(e["valid_to"]) if e.get("valid_to") else None,
+                           params, e.get("source", ""))
+
     @property
     def supported_states(self) -> list[str]:
         return sorted(self._states)

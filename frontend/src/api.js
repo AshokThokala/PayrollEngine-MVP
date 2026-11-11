@@ -58,6 +58,10 @@ export const api = {
   lockRun: (runId) => request('POST', `/runs/${enc(runId)}/lock`),
   listFilings: (clientId) =>
     request('GET', clientId ? `/filings?client_id=${enc(clientId)}` : '/filings'),
+  listRuleCategories: () => request('GET', '/rules/categories'),
+  listRuleStates: () => request('GET', '/rules/states'),
+  listRules: () => request('GET', '/rules'),
+  createRule: (body) => request('POST', '/rules', body),
   updateFiling: (filingId, status, challanRef) =>
     request('POST', `/filings/${enc(filingId)}`, { status, challan_ref: challanRef || null }),
 }

@@ -1,7 +1,7 @@
 """Request and response models for the HTTP API."""
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, datetime
 from decimal import Decimal
 
 from typing import Annotated
@@ -114,3 +114,29 @@ class FilingOut(BaseModel):
 class FilingUpdate(BaseModel):
     status: str
     challan_ref: str | None = None
+
+
+class RuleIn(BaseModel):
+    scope: str = Field(description="'central' or a state code such as TG")
+    category: str
+    valid_from: date
+    params: dict
+    source: str = ""
+
+
+class RuleOut(BaseModel):
+    id: str
+    scope: str
+    category: str
+    category_label: str
+    valid_from: date
+    valid_to: date | None
+    params: dict
+    source: str
+    created_by: str
+    created_at: datetime | None
+
+
+class RuleCreated(BaseModel):
+    rule: RuleOut
+    closed: RuleOut | None

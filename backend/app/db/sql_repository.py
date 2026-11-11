@@ -5,13 +5,14 @@ repository is safe to share between API requests.
 """
 from __future__ import annotations
 
+import json
 from contextlib import contextmanager
 from datetime import date, datetime
 from decimal import Decimal
 from typing import Any, Iterator
 
 from ..domain import (AuditEvent, Client, EmployeeRecord, Filing, FilingStatus,
-                      PayrollRun, RunStatus)
+                      PayrollRun, RunStatus, StatutoryRule)
 from ..engine.models import Employee, Line, Payslip, SalaryStructure
 from ..repository import NotFound
 from .connection import Database
@@ -272,6 +273,25 @@ class SqlRepository:
         with self._tx() as c:
             rows = c.all("SELECT at, user_name, action, entity, detail FROM audit_events ORDER BY id")
         return [AuditEvent(_dt(a), u, act, ent, d) for a, u, act, ent, d in rows]
+
+
+    # --- statutory rules -----------------------------------------------------------
+    def save_rule(self, rule: StatutoryRule) -> None:
+        with self._tx() as c:
+            c.run("DELETE FROM statutory_rules WHERE id = ?", rule.id)
+            c.run("INSERT INTO statutory_rules (id, scope, category, valid_from, valid_to, params,"
+                  " source, created_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                  rule.id, rule.scope, rule.category, rule.valid_from, rule.valid_to,
+                  json.dumps(rule.params, default=str), rule.source, rule.created_by,
+                  rule.created_at or datetime.now().astimezone())
+
+    def list_rules(self) -> list[StatutoryRule]:
+        with self._tx() as c:
+            rows = c.all("SELECT scope, category, valid_from, valid_to, params, source, created_by,"
+                         " created_at FROM statutory_rules ORDER BY scope, category, valid_from")
+        return [StatutoryRule(scope, category, _date(vf), json.loads(params), _date(vt), source,
+                              created_by, _dt(created_at))
+                for scope, category, vf, vt, params, source, created_by, created_at in rows]
 
 
 class _Cursor:

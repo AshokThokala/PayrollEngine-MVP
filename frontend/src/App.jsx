@@ -4,12 +4,14 @@ import ClientsPage from './pages/ClientsPage.jsx'
 import EmployeesPage from './pages/EmployeesPage.jsx'
 import RunsPage from './pages/RunsPage.jsx'
 import FilingsPage from './pages/FilingsPage.jsx'
+import RulesPage from './pages/RulesPage.jsx'
 
 const TABS = [
   { id: 'clients', label: 'Clients' },
   { id: 'employees', label: 'Employees', needsClient: true },
   { id: 'runs', label: 'Payroll runs', needsClient: true },
   { id: 'filings', label: 'Compliance calendar' },
+  { id: 'rules', label: 'Compliance rules' },
 ]
 
 export default function App() {
@@ -96,6 +98,7 @@ export default function App() {
         {tab === 'employees' && client && <EmployeesPage client={client} />}
         {tab === 'runs' && client && <RunsPage client={client} user={user} />}
         {tab === 'filings' && <FilingsPage clientId={clientId} clients={clients} />}
+        {tab === 'rules' && <RulesPage />}
       </main>
     </div>
   )

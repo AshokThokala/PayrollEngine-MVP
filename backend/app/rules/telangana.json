@@ -6,11 +6,21 @@
       "valid_from": "2013-04-01",
       "valid_to": null,
       "slabs": [
-        {"upto": 15000, "amount": 0},
-        {"upto": 20000, "amount": 150},
-        {"upto": null, "amount": 200}
+        {
+          "upto": 15000,
+          "amount": 0
+        },
+        {
+          "upto": 20000,
+          "amount": 150
+        },
+        {
+          "upto": null,
+          "amount": 200
+        }
       ],
-      "source": "Telangana Tax on Professions, Trades, Callings and Employments Act, 1987"
+      "source": "Telangana Tax on Professions, Trades, Callings and Employments Act, 1987",
+      "due_day": 10
     }
   ],
   "lwf": [
@@ -19,10 +29,12 @@
       "valid_to": null,
       "employee_amount": 2,
       "employer_amount": 5,
-      "frequency": "yearly",
-      "deduction_months": [12],
-      "due": "31 January",
-      "source": "Telangana Labour Welfare Fund Act, 1987 s.10(1) - VERIFY deduction month"
+      "deduction_months": [
+        12
+      ],
+      "source": "Telangana Labour Welfare Fund Act, 1987 s.10(1) - VERIFY deduction month",
+      "due_month": 1,
+      "due_day": 31
     }
   ]
 }

@@ -9,11 +9,12 @@ from __future__ import annotations
 
 import calendar
 from dataclasses import dataclass, field
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 from typing import Callable
 
-from ..domain import (AuditEvent, Client, EmployeeRecord, Filing, FilingStatus,
+from .. import rule_schemas
+from ..domain import (AuditEvent, Client, EmployeeRecord, Filing, FilingStatus, StatutoryRule,
                       PayrollRun, RunStatus)
 from ..engine import PayInputs, RuleBook, SalaryStructure, compute_payslip
 from ..engine.money import D
@@ -28,9 +29,11 @@ VARIANCE_THRESHOLD = Decimal("0.10")
 class ServiceError(ValueError):
     """A request the business rules reject. ``field`` names the input at fault, if any."""
 
-    def __init__(self, message: str, field: str | None = None):
+    def __init__(self, message: str, field: str | None = None,
+                 errors: dict[str, str] | None = None):
         super().__init__(message)
         self.field = field
+        self.errors = errors or {}  # several fields at once: {field: message}
 
 
 @dataclass
@@ -50,11 +53,61 @@ def fy_start(d: date) -> date:
 
 
 class PayrollService:
-    def __init__(self, repo: Repository, rules: RuleBook,
+    def __init__(self, repo: Repository, rules: RuleBook | None = None,
                  clock: Callable[[], datetime] = lambda: datetime.now(timezone.utc)):
+        """``rules``: a fixed rule book (tests); by default rules are read from the repository."""
         self.repo = repo
-        self.rules = rules
+        self._fixed_rules = rules
         self.clock = clock
+
+    @property
+    def rules(self) -> RuleBook:
+        if self._fixed_rules is not None:
+            return self._fixed_rules
+        return RuleBook.from_records(self.repo.list_rules())
+
+    # --- compliance rules ------------------------------------------------------
+    def ensure_rules_seeded(self, user: str = "system") -> int:
+        """Load the default rules (app/rules/*.json) into an empty rules table."""
+        if self.repo.list_rules():
+            return 0
+        count = 0
+        for scope, category, vf, vt, params, source in RuleBook.load().default_records():
+            self.repo.save_rule(StatutoryRule(scope, category, vf, params, vt, source,
+                                              created_by=user, created_at=self.clock()))
+            count += 1
+        self._audit(user, "rules.seed", "statutory_rules", f"{count} default rules")
+        return count
+
+    def add_rule(self, scope: str, category: str, valid_from: date, params: dict,
+                 source: str, user: str) -> tuple[StatutoryRule, StatutoryRule | None]:
+        """Add a new dated version. The previous open version is closed the day before.
+
+        Returns (new rule, previous rule that was closed or None).
+        """
+        cleaned, errors = rule_schemas.validate(category, scope, params)
+        if not source.strip():
+            errors["source"] = "Enter the notification, circular or act this comes from"
+        if errors:
+            raise ServiceError("Check the highlighted fields", errors=errors)
+        versions = [r for r in self.repo.list_rules() if r.scope == scope and r.category == category]
+        later = [r for r in versions if r.valid_from >= valid_from]
+        if later:
+            raise ServiceError(
+                f"A version starting {later[0].valid_from} already exists; "
+                f"choose a date after {max(r.valid_from for r in versions)}", field="valid_from")
+        previous = max(versions, key=lambda r: r.valid_from) if versions else None
+        if previous and (previous.valid_to is None or previous.valid_to >= valid_from):
+            previous.valid_to = valid_from - timedelta(days=1)
+            self.repo.save_rule(previous)
+        else:
+            previous = None
+        rule = StatutoryRule(scope, category, valid_from, cleaned, None, source.strip(),
+                             created_by=user, created_at=self.clock())
+        self.repo.save_rule(rule)
+        self._audit(user, "rule.create", rule.id,
+                    f"closed {previous.id} on {previous.valid_to}" if previous else "first version")
+        return rule, previous
 
     # --- audit ---------------------------------------------------------------
     def _audit(self, user: str, action: str, entity: str, detail: str = "") -> None:
@@ -69,7 +122,7 @@ class PayrollService:
         else:
             raise ServiceError(f"A client with ID '{client.id}' already exists", field="id")
         if client.state not in self.rules.supported_states:
-            raise ServiceError(f"{client.state} is not supported yet; only Telangana (TG) is", field="state")
+            raise ServiceError(f"No compliance rules for {client.state} yet; add its rules on the Compliance rules page first", field="state")
         self.repo.add_client(client)
         self._audit(user, "client.create", client.id)
         return client
@@ -124,6 +177,7 @@ class PayrollService:
         if unknown:
             raise ServiceError(f"Unknown or inactive employees: {', '.join(sorted(unknown))}", field="inputs")
 
+        rules = self.rules  # read once for the whole run
         days = calendar.monthrange(end.year, end.month)[1]
         ytd = self._ytd(client_id, end)
         previous = self._previous_locked(client_id, end)
@@ -140,7 +194,7 @@ class PayrollService:
                           other_deductions=mi.other_deductions,
                           fy_month_index=fy_month_index(end),
                           ytd_taxable_gross=gross_ytd, ytd_tds=tds_ytd),
-                self.rules,
+                rules,
             )
             run.slips[record.code] = slip
             run.flags += [f"{record.code}: {w}" for w in slip.warnings]
@@ -168,7 +222,7 @@ class PayrollService:
         run.status, run.locked_at = RunStatus.LOCKED, self.clock()
         self.repo.save_run(run)
         client = self.repo.get_client(run.client_id)
-        filings = filings_for_run(run, client.state)
+        filings = filings_for_run(run, client.state, self.rules)
         for f in filings:
             self.repo.save_filing(f)
         self._audit(user, "run.lock", run_id, f"{len(filings)} filings scheduled")

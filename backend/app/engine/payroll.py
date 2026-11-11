@@ -6,7 +6,7 @@ from datetime import date
 
 from .models import Employee, Line, PayInputs, Payslip, SalaryStructure
 from .money import ZERO, paise
-from .rules import RuleBook
+from .rules import RuleBook, RuleNotFound
 from .statutory import compute_esi, compute_lwf, compute_pf, compute_pt, esi_covered
 from .tds import monthly_tds
 from .wages import check_structure, statutory_wages
@@ -75,12 +75,21 @@ def compute_payslip(employee: Employee, structure: SalaryStructure,
 
     # 5. Professional tax and Labour Welfare Fund (state rules).
     if employee.pt_applicable:
-        pt_rule = rules.state(employee.state, "professional_tax", on)
-        pt = compute_pt(gross, pt_rule)
+        try:
+            pt_rule = rules.state(employee.state, "professional_tax", on)
+        except RuleNotFound:
+            pt_rule = None
+            warnings.append(f"No Professional Tax rule for {employee.state} on {on}; PT not deducted")
+        pt = compute_pt(gross, pt_rule) if pt_rule else 0
         if pt:
             deductions.append(Line("pt", "Professional tax", pt, pt_rule.version))
+    lwf_rule = None
     if employee.lwf_applicable:
-        lwf_rule = rules.state(employee.state, "lwf", on)
+        try:
+            lwf_rule = rules.state(employee.state, "lwf", on)
+        except RuleNotFound:
+            warnings.append(f"No Labour Welfare Fund rule for {employee.state} on {on}; LWF not deducted")
+    if lwf_rule:
         lwf_emp, lwf_er = compute_lwf(on.month, lwf_rule)
         if lwf_emp or lwf_er:
             deductions.append(Line("lwf_employee", "Labour welfare fund", lwf_emp, lwf_rule.version))

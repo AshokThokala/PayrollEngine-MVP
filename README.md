@@ -27,13 +27,16 @@ docker compose down -v            # stop and DELETE all data
 ```
 
 ### Using the UI
-1. **Clients** - add a client firm (state: Telangana).
+1. **Clients** - add a client firm. Only states that have compliance rules can be chosen.
 2. **Employees** - add employees with their monthly salary split; you are warned if basic + DA is under 50%.
 3. **Payroll runs** - pick a month and *Calculate draft*. Open payslips to see every line.
    To approve, change **Acting as** (top right) to a different name - the preparer cannot approve.
    Then *Lock run* to freeze it.
 4. **Compliance calendar** - locking creates PF, ESI, TDS, PT, LWF and Form 24Q items with due dates.
    Enter the challan reference and mark them paid or filed. Overdue items are highlighted.
+5. **Compliance rules** - every statutory rule with its dated versions. *Add rule version* to change a rate,
+   slab or due date from a given date (the previous version ends the day before), or add Professional Tax /
+   LWF rules for a new state so clients can be created there.
 
 "Acting as" is a placeholder for real login; it is recorded in the audit log.
 
@@ -120,13 +123,16 @@ python -m pytest
 | `payslip_warnings` | Warnings per payslip |
 | `filings` | Compliance calendar: due dates, status, challan reference |
 | `audit_events` | Append-only audit log (UPDATE/DELETE blocked on Postgres) |
+| `statutory_rules` | Compliance rules: one row per dated version (scope, category, valid_from/to, JSON values, source) |
 | `schema_migrations` | Applied migrations |
 
 ## Design rules
 
 - Money is always `Decimal`, never `float`.
-- Statutory rates live in `app/rules/*.json` with `valid_from` / `valid_to`; a law change
-  is a new entry, not a code change.
+- Statutory rules live in the `statutory_rules` table with `valid_from` / `valid_to`; a law change
+  is a new version added on the Compliance rules page, not a code change. `app/rules/*.json` holds the
+  default rules loaded into an empty table on first start. `app/rule_schemas.py` defines the fields
+  each rule type must have and validates new versions.
 - Every statutory payslip line records the rule version it used (e.g. `central.pf@2026-09-17`).
 
 > **Not yet verified for live use.** Rates and dates in `app/rules/` must be signed off by a

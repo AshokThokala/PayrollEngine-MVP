@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from typing import Protocol
 
-from .domain import AuditEvent, Client, EmployeeRecord, Filing, PayrollRun
+from .domain import AuditEvent, Client, EmployeeRecord, Filing, PayrollRun, StatutoryRule
 
 
 class NotFound(LookupError):
@@ -34,6 +34,9 @@ class Repository(Protocol):
     def append_audit(self, event: AuditEvent) -> None: ...
     def audit_log(self) -> list[AuditEvent]: ...
 
+    def save_rule(self, rule: StatutoryRule) -> None: ...
+    def list_rules(self) -> list[StatutoryRule]: ...
+
 
 class InMemoryRepository:
     def __init__(self) -> None:
@@ -42,6 +45,7 @@ class InMemoryRepository:
         self._runs: dict[str, PayrollRun] = {}
         self._filings: dict[str, Filing] = {}
         self._audit: list[AuditEvent] = []
+        self._rules: dict[str, StatutoryRule] = {}
 
     @staticmethod
     def _get(store: dict, key, what: str):
@@ -95,3 +99,9 @@ class InMemoryRepository:
 
     def audit_log(self) -> list[AuditEvent]:
         return list(self._audit)
+
+    def save_rule(self, rule: StatutoryRule) -> None:
+        self._rules[rule.id] = rule
+
+    def list_rules(self) -> list[StatutoryRule]:
+        return sorted(self._rules.values(), key=lambda r: (r.scope, r.category, r.valid_from))

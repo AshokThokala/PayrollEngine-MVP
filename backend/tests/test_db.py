@@ -28,7 +28,7 @@ def service(repo):
 
 def test_migrate_is_idempotent(tmp_path):
     db = database_from_url(f"sqlite:///{tmp_path / 'm.db'}")
-    assert migrate(db) == ["001_initial"]
+    assert migrate(db) == ["001_initial", "003_statutory_rules"]
     assert migrate(db) == []
 
 

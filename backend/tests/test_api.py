@@ -68,3 +68,26 @@ def test_errors_name_the_field(client):
 
     r = client.post("/clients", json={"id": "x2", "legal_name": "X"})
     assert r.json()["errors"][0]["label"] == "Acting as"
+
+
+def test_rules_endpoints(client):
+    cats = {c["category"]: c for c in client.get("/rules/categories").json()}
+    assert cats["pf"]["scope"] == "central" and cats["lwf"]["scope"] == "state"
+    states = {s["code"]: s["supported"] for s in client.get("/rules/states").json()}
+    assert states["TG"] is True and states["KA"] is False
+
+    pf = client.get("/rules", params={"category": "pf"}).json()
+    assert [r["valid_from"] for r in pf] == ["2014-09-01", "2026-09-17"]
+
+    body = {"scope": "KA", "category": "lwf", "valid_from": "2026-01-01", "source": "test",
+            "params": {"employee_amount": 20, "employer_amount": 40, "deduction_months": [12],
+                       "due_month": 1, "due_day": 15}}
+    r = client.post("/rules", headers=OPS, json=body)
+    assert r.status_code == 201 and r.json()["closed"] is None
+    assert {s["code"]: s["supported"] for s in client.get("/rules/states").json()}["KA"] is True
+
+    bad = {**body, "valid_from": "2027-01-01", "params": {**body["params"], "due_day": 0}, "source": ""}
+    r = client.post("/rules", headers=OPS, json=bad)
+    assert r.status_code == 422
+    labels = {e["label"] for e in r.json()["errors"]}
+    assert labels == {"Payment due day", "Source"}

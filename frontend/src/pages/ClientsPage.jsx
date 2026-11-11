@@ -1,4 +1,4 @@
-import { cloneElement, useState } from 'react'
+import { cloneElement, useEffect, useState } from 'react'
 import { api } from '../api.js'
 import InfoTip from '../components/InfoTip.jsx'
 
@@ -6,7 +6,7 @@ import InfoTip from '../components/InfoTip.jsx'
 const TIPS = {
   id: 'Short unique code for this client: 2–40 lowercase letters, digits or hyphens (e.g. acme-textiles). Used in run and filing IDs and cannot be changed later.',
   legal_name: 'Registered name of the business exactly as on its PAN or registration certificate. Shown on payslips and statutory reports.',
-  state: 'State where the employees work. It decides which Professional Tax and Labour Welfare Fund rules apply. Only Telangana is supported for now.',
+  state: 'State where the employees work. It decides which Professional Tax and Labour Welfare Fund rules apply. States appear here once they have rules on the Compliance rules page.',
   pan: "Business's 10-character Permanent Account Number: 5 letters, 4 digits, 1 letter (e.g. AAACA1234A). Optional for now.",
   tan: '10-character Tax Deduction Account Number used to deposit TDS and file Form 24Q: 4 letters, 5 digits, 1 letter (e.g. HYDA12345B).',
   pf_code: 'EPFO establishment code from the employer\'s PF registration (e.g. TSHYD0012345000). Needed for the monthly ECR and PF challan.',
@@ -41,6 +41,12 @@ export default function ClientsPage({ clients, onCreated, onOpen }) {
   const [message, setMessage] = useState(null)
   const [busy, setBusy] = useState(false)
   const [fieldErrors, setFieldErrors] = useState({})
+  const [states, setStates] = useState([{ code: 'TG', name: 'Telangana', supported: true }])
+
+  // States with compliance rules (added on the Compliance rules page) can take clients.
+  useEffect(() => {
+    api.listRuleStates().then((list) => setStates(list.filter((s) => s.supported))).catch(() => {})
+  }, [])
 
   const set = (key) => (e) => {
     setForm({ ...form, [key]: e.target.value })
@@ -103,7 +109,7 @@ export default function ClientsPage({ clients, onCreated, onOpen }) {
           </Field>
           <Field name="state" error={fieldErrors.state} label="State">
             <select value={form.state} onChange={set('state')}>
-              <option value="TG">Telangana</option>
+              {states.map((s) => <option key={s.code} value={s.code}>{s.name}</option>)}
             </select>
           </Field>
           <div className="row">

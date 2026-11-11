@@ -128,3 +128,11 @@ details summary { cursor: pointer; color: var(--accent); font-size: 0.9rem; }
 
 .brand { font-size: 1.15rem; letter-spacing: 0.01em; }
 .brand .tagline { font-weight: 400; font-size: 0.8rem; opacity: 0.75; margin-left: 6px; }
+
+/* Compliance rules page */
+.rule-group { border-top: 1px solid var(--line); padding-top: 4px; }
+.rule-version { padding: 8px 0 10px 10px; border-left: 3px solid var(--accent); margin: 8px 0; }
+.rule-version.dim { border-left-color: var(--line); opacity: 0.75; }
+.rule-dates { font-weight: 600; font-size: 0.9rem; margin-bottom: 4px; }
+.rule-values { list-style: none; margin: 0 0 4px; padding: 0; font-size: 0.85rem; display: flex; flex-direction: column; gap: 2px; }
+table.slabs input { width: 120px; }

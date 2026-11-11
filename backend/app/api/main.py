@@ -15,7 +15,8 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
 from ..domain import Client, EmployeeRecord, FilingStatus, PayrollRun
-from ..engine import Employee, RuleBook, SalaryStructure
+from .. import rule_schemas
+from ..engine import Employee, SalaryStructure
 from ..db import make_repository
 from ..repository import NotFound
 from ..services import MonthInput, PayrollService, ServiceError
@@ -29,7 +30,9 @@ app = FastAPI(title="ClearPay4U API", description="ClearPay4U — zero-penalty p
 @lru_cache
 def get_service() -> PayrollService:
     # PostgreSQL (or SQLite) when DATABASE_URL is set, otherwise in memory.
-    return PayrollService(make_repository(), RuleBook.load())
+    svc = PayrollService(make_repository())  # rules are read from the statutory_rules table
+    svc.ensure_rules_seeded()
+    return svc
 
 
 def current_user(x_user: str = Header(..., description="Placeholder auth")) -> str:
@@ -43,6 +46,10 @@ async def _not_found(_: Request, exc: NotFound):
 
 @app.exception_handler(ServiceError)
 async def _rejected(_: Request, exc: ServiceError):
+    if exc.errors:  # several fields at once (rule validation)
+        category = getattr(exc, "category", "")
+        return JSONResponse(status_code=422, content=errors.from_field_errors(
+            exc.errors, lambda k: rule_schemas.field_label(category, k)))
     return JSONResponse(status_code=409, content=errors.from_service(str(exc), exc.field))
 
 
@@ -178,3 +185,45 @@ def update_filing(filing_id: str, body: s.FilingUpdate, user: str = Depends(curr
         return JSONResponse(status_code=422, content=errors.from_service(
             f"Use one of: {', '.join(x.value for x in FilingStatus)}", "status"))
     return _filing_out(svc.update_filing(filing_id, status, user, body.challan_ref))
+
+
+# --- compliance rules ----------------------------------------------------------
+
+def _rule_out(r) -> s.RuleOut:
+    return s.RuleOut(id=r.id, scope=r.scope, category=r.category,
+                     category_label=rule_schemas.CATEGORIES.get(r.category, {}).get("label", r.category),
+                     valid_from=r.valid_from, valid_to=r.valid_to, params=r.params, source=r.source,
+                     created_by=r.created_by, created_at=r.created_at)
+
+
+@app.get("/rules/categories")
+def rule_categories():
+    """Rule types and their fields - the UI builds the Add rule form from this."""
+    return [{"category": k, **v} for k, v in rule_schemas.CATEGORIES.items()]
+
+
+@app.get("/rules/states")
+def rule_states(svc: PayrollService = Depends(get_service)):
+    """All states, flagging those with at least one rule (clients can be created there)."""
+    supported = set(svc.rules.supported_states)
+    return [{"code": code, "name": name, "supported": code in supported}
+            for code, name in sorted(rule_schemas.STATE_NAMES.items(), key=lambda kv: kv[1])]
+
+
+@app.get("/rules", response_model=list[s.RuleOut])
+def list_rules(scope: str | None = None, category: str | None = None,
+               svc: PayrollService = Depends(get_service)):
+    return [_rule_out(r) for r in svc.repo.list_rules()
+            if scope in (None, r.scope) and category in (None, r.category)]
+
+
+@app.post("/rules", status_code=201, response_model=s.RuleCreated)
+def create_rule(body: s.RuleIn, user: str = Depends(current_user),
+                svc: PayrollService = Depends(get_service)):
+    try:
+        rule, closed = svc.add_rule(body.scope, body.category, body.valid_from, body.params,
+                                    body.source, user)
+    except ServiceError as exc:
+        exc.category = body.category
+        raise
+    return s.RuleCreated(rule=_rule_out(rule), closed=_rule_out(closed) if closed else None)
