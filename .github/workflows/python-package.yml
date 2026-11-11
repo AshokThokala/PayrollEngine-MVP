@@ -96,6 +96,12 @@ jobs:
           -H "Authorization: Bearer $TOKEN" -d '{"email":"ravi@example.com"}' | grep -q '"email_sent":true'
         curl -fs http://localhost:8025/api/v1/messages | grep -q 'ravi@example.com'
         echo "Invite email delivered to Mailpit"
+    - name: Production compose file is valid
+      run: |
+        cp deploy/.env.example /tmp/prod.env
+        sed -i 's/^\(POSTGRES_PASSWORD\|SECRET_KEY\|FIELD_ENCRYPTION_KEY\|ADMIN_PASSWORD\)=$/\1=ci-value/; s/^ADMIN_EMAIL=$/ADMIN_EMAIL=ci@example.com/' /tmp/prod.env
+        docker compose -f deploy/docker-compose.prod.yml --env-file /tmp/prod.env config --quiet
+        bash -n deploy/*.sh
     - name: Logs on failure
       if: failure()
       run: docker compose logs
