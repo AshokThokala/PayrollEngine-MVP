@@ -310,14 +310,13 @@ export default function TaxRulesPage({ canEdit, onEdit }) {
         <p className="muted small">Every change is a new dated version; past payslips keep the version they used.</p>
         <div className="table-wrap">
           <table>
-            <thead><tr><th>Regime</th><th>From</th><th>To</th><th>Source</th><th>Added by</th></tr></thead>
+            <thead><tr><th>Regime</th><th>From</th><th>To</th><th>Added by</th></tr></thead>
             <tbody>
               {data.history.map((h) => (
-                <tr key={h.id}>
+                <tr key={h.id} title={h.source || undefined}>
                   <td>{h.regime === 'new' ? 'New' : 'Old'}</td>
                   <td>{fmtDate(h.valid_from)}</td>
                   <td>{h.valid_to ? fmtDate(h.valid_to) : <span className="tag paid">current</span>}</td>
-                  <td className="small">{h.source || '—'}</td>
                   <td className="small">{h.created_by || 'seed'}</td>
                 </tr>
               ))}

@@ -129,7 +129,7 @@ export default function EmployeeOnboardingPage({ client }) {
                     <tr key={r.employee_code} className={r.employee_code === selected ? 'selected' : undefined}
                         tabIndex={0} onClick={() => setSelected(r.employee_code)}
                         onKeyDown={(e) => e.key === 'Enter' && setSelected(r.employee_code)}>
-                      <td><strong>{r.name}</strong><br /><span className="muted small">{r.employee_code}{r.email ? ` · ${r.email}` : ''}</span></td>
+                      <td><strong>{r.name}</strong> <span className="muted small">{r.employee_code}</span></td>
                       <td><StageTag stage={r.stage} /></td>
                     </tr>
                   ))}
@@ -144,10 +144,10 @@ export default function EmployeeOnboardingPage({ client }) {
             <>
               <h2>How it works</h2>
               <ol className="steps-list">
-                <li><strong>Invite</strong> — pick an employee and make an invite link for their email.</li>
-                <li><strong>Register</strong> — they open the link, set a password and are logged in.</li>
-                <li><strong>Onboard</strong> — they fill in contact details, PAN, UAN/ESI and bank account, then submit.</li>
-                <li><strong>Verify</strong> — you check the details here, then verify or send them back with a note.</li>
+                <li><strong>Invite</strong> — make a link for their email</li>
+                <li><strong>Register</strong> — they set a password</li>
+                <li><strong>Onboard</strong> — they submit contact, PAN, UAN and bank</li>
+                <li><strong>Verify</strong> — you approve or send back</li>
               </ol>
             </>
           ) : (

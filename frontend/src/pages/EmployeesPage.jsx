@@ -248,7 +248,6 @@ export default function EmployeesPage({ client, onViewAs, openRequest }) {
             </table>
           </div>
         )}
-        <p className="muted small">Click an employee to view or edit.</p>
       </section>
 
       {mode === 'none' && (

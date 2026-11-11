@@ -79,9 +79,9 @@ export default function ReportsPage({ client }) {
         <ul className="list">
           {catalog.map((r) => (
             <li key={r.key}>
-              <button className={key === r.key ? 'list-item report-item active' : 'list-item report-item'} onClick={() => setKey(r.key)}>
+              <button className={key === r.key ? 'list-item report-item active' : 'list-item report-item'}
+                title={r.description} onClick={() => setKey(r.key)}>
                 <strong>{r.title}</strong>
-                <span className="muted small">{r.description}</span>
               </button>
             </li>
           ))}
