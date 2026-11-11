@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { api, money, today } from '../api.js'
 import InfoTip from '../components/InfoTip.jsx'
 import TaxFields, { EMPTY_TAX, taxFromEmployee } from '../components/TaxFields.jsx'
@@ -39,7 +39,7 @@ function FieldError({ label, error }) {
   return error ? <span className="field-error">{label}: {error}</span> : null
 }
 
-export default function EmployeesPage({ client, onViewAs }) {
+export default function EmployeesPage({ client, onViewAs, openRequest }) {
   const [employees, setEmployees] = useState([])
   const [mode, setMode] = useState('none') // none | add | edit
   const [selectedCode, setSelectedCode] = useState(null)
@@ -51,11 +51,14 @@ export default function EmployeesPage({ client, onViewAs }) {
   const [taxErrors, setTaxErrors] = useState({})
   const [message, setMessage] = useState(null)
   const [busy, setBusy] = useState(false)
+  const [loadedFor, setLoadedFor] = useState(null)
+  const handled = useRef(null)
 
   const load = useCallback(async () => {
     try {
       const list = await api.listEmployees(client.id)
       setEmployees(list)
+      setLoadedFor(client.id)
       return list
     } catch (err) {
       setMessage({ kind: 'error', text: err.message })
@@ -108,6 +111,18 @@ export default function EmployeesPage({ client, onViewAs }) {
     setTax(taxFromEmployee(emp))
     setExitOn('')
   }
+
+  // Opened from the search box: select that employee once their client's list has loaded.
+  useEffect(() => {
+    if (!openRequest || handled.current === openRequest.n) return
+    if (openRequest.clientId !== client.id || loadedFor !== client.id) return
+    const emp = employees.find((e) => e.code === openRequest.code)
+    if (!emp) return
+    handled.current = openRequest.n
+    setSearch('')
+    select(emp)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [openRequest, employees, loadedFor, client.id])
 
   const run = async (fn) => {
     setBusy(true)

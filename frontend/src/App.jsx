@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { api, loadSession, saveSession, stashAdminSession, stashedAdminSession, whenLoggedOut } from './api.js'
 import ClientSwitcher from './components/ClientSwitcher.jsx'
+import GlobalSearch from './components/GlobalSearch.jsx'
 import AuthScreen from './pages/AuthScreen.jsx'
 import BillingPage from './pages/BillingPage.jsx'
 import ClientOnboardingPage from './pages/ClientOnboardingPage.jsx'
@@ -93,6 +94,8 @@ function AdminShell({ user, onLogout, onViewAs }) {
   const [clientId, setClientId] = useState(user.client_id || '')
   const [tab, setTab] = useState(platform ? 'clients' : 'employees')
   const [error, setError] = useState('')
+  const [openEmployee, setOpenEmployee] = useState(null) // from search: { code, n }
+  const [openClient, setOpenClient] = useState(null)
   const [ruleCategory, setRuleCategory] = useState(null) // Tax rules → open Compliance rules on a category
 
   const loadClients = useCallback(async () => {
@@ -152,6 +155,19 @@ function AdminShell({ user, onLogout, onViewAs }) {
       <div className="main-col">
         <header className="topbar">
           <h1 className="page-title">{nav.find((n) => n.id === tab)?.label}</h1>
+          <GlobalSearch
+            platform={platform}
+            onPickClient={(id) => {
+              setClientId(id)
+              setOpenClient({ id, n: Date.now() })
+              setTab(platform ? 'clients' : 'employees')
+            }}
+            onPickEmployee={(cid, code) => {
+              setClientId(cid)
+              setOpenEmployee({ clientId: cid, code, n: Date.now() })
+              setTab('employees')
+            }}
+          />
           {platform && clients.length > 0 ? (
             <ClientSwitcher clients={clients} value={clientId} onChange={setClientId} />
           ) : (
@@ -165,6 +181,7 @@ function AdminShell({ user, onLogout, onViewAs }) {
           {tab === 'clients' && platform && (
             <ClientsPage
               clients={clients}
+              openRequest={openClient}
               onCreated={async (id) => {
                 await loadClients()
                 setClientId(id)
@@ -177,7 +194,7 @@ function AdminShell({ user, onLogout, onViewAs }) {
             />
           )}
           {tab === 'employees' && client && (
-            <EmployeesPage client={client} onViewAs={(code) => onViewAs(client.id, code).catch((e) => setError(e.message))} />
+            <EmployeesPage client={client} openRequest={openEmployee} onViewAs={(code) => onViewAs(client.id, code).catch((e) => setError(e.message))} />
           )}
           {tab === 'runs' && client && <RunsPage client={client} user={user.email} />}
           {tab === 'filings' && <FilingsPage clientId={clientId} clients={clients} canSeeAll={platform} />}

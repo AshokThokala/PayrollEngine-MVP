@@ -282,3 +282,13 @@ def test_tax_rules_api(client, ops):
     r = client.post("/tax/calculate", headers=ops, json={"annual_gross": "x"})
     assert r.status_code == 422 and r.json()["errors"][0]["label"] == "Yearly gross salary"
     assert client.get("/tax/rules").status_code == 401
+
+
+def test_search_api(client, ops):
+    client.post("/clients", headers=ops, json={"id": "acme", "legal_name": "Acme", "state": "TG"})
+    client.post("/clients/acme/employees", headers=ops, json={
+        "code": "E1", "name": "Ravi", "joined_on": "2026-04-01", "components": {"basic": 30000}})
+    r = client.get("/search?q=rav", headers=ops).json()
+    assert r["employees"][0]["code"] == "E1" and r["employees"][0]["active"] is True
+    assert client.get("/search?q=acm", headers=ops).json()["clients"][0]["id"] == "acme"
+    assert client.get("/search?q=ra").status_code == 401

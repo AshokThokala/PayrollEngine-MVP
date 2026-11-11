@@ -59,6 +59,8 @@ class Repository(Protocol):
     def save_profile(self, profile: EmployeeProfile) -> None: ...
     def get_profile(self, client_id: str, employee_code: str) -> EmployeeProfile | None: ...
     def list_profiles(self, client_id: str) -> list[EmployeeProfile]: ...
+    def search_employees(self, query: str, client_ids: list[str] | None = None,
+                         limit: int = 20) -> list[dict]: ...
     def get_user(self, user_id: str) -> User: ...
     def find_user_by_email(self, email: str) -> User | None: ...
     def list_users(self, client_id: str | None = None) -> list[User]: ...
@@ -172,6 +174,17 @@ class InMemoryRepository:
     def list_users(self, client_id: str | None = None) -> list[User]:
         users = [u for u in self._users.values() if client_id in (None, u.client_id)]
         return sorted(users, key=lambda u: (u.client_id or "", u.role.value, u.email))
+
+    def search_employees(self, query: str, client_ids: list[str] | None = None,
+                         limit: int = 20) -> list[dict]:
+        """Employees whose name or code contains the text (any case); current employees first."""
+        q = query.strip().lower()
+        hits = [r for (cid, _), r in self._employees.items()
+                if (client_ids is None or cid in client_ids)
+                and (q in r.employee.name.lower() or q in r.code.lower())]
+        hits.sort(key=lambda r: (r.exited_on is not None, r.employee.name.lower(), r.client_id, r.code))
+        return [{"client_id": r.client_id, "code": r.code, "name": r.employee.name,
+                 "exited_on": r.exited_on} for r in hits[:limit]]
 
     def save_invite(self, invite: Invite) -> None:
         self.get_client(invite.client_id)
