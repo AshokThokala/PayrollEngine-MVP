@@ -174,6 +174,24 @@ class SqlRepository:
                          " ORDER BY code", client_id)
             return [self._employee_from_row(c, r) for r in rows]
 
+    def search_employees(self, query: str, client_ids: list[str] | None = None,
+                         limit: int = 20) -> list[dict]:
+        """Employees whose name or code contains the text (any case); current employees first."""
+        if client_ids is not None and not client_ids:
+            return []
+        like = "%" + query.strip().lower().replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
+        sql = ("SELECT client_id, code, name, exited_on FROM employees"
+               " WHERE (LOWER(name) LIKE ? ESCAPE '\\' OR LOWER(code) LIKE ? ESCAPE '\\')")
+        args: list = [like, like]
+        if client_ids is not None:
+            sql += f" AND client_id IN ({', '.join('?' for _ in client_ids)})"
+            args += list(client_ids)
+        sql += " ORDER BY CASE WHEN exited_on IS NULL THEN 0 ELSE 1 END, LOWER(name), client_id, code LIMIT ?"
+        with self._tx() as c:
+            rows = c.all(sql, *args, int(limit))
+        return [{"client_id": cid, "code": code, "name": name, "exited_on": _date(ex)}
+                for cid, code, name, ex in rows]
+
     # --- payroll runs --------------------------------------------------------------
     def save_run(self, run: PayrollRun) -> None:
         with self._tx() as c:

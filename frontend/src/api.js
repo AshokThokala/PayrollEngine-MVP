@@ -99,6 +99,7 @@ export const api = {
   updateClient: (clientId, body) => request('PUT', `/clients/${enc(clientId)}`, body),
   updateEmployee: (clientId, code, body) => request('PUT', `/clients/${enc(clientId)}/employees/${enc(code)}`, body),
   viewAs: (clientId, code) => request('POST', `/clients/${enc(clientId)}/employees/${enc(code)}/view-as`),
+  search: (q) => request('GET', `/search?q=${enc(q)}`),
   taxRules: (on) => request('GET', `/tax/rules${on ? `?on=${enc(on)}` : ''}`),
   taxCalculate: (body) => request('POST', '/tax/calculate', body),
   reportCatalog: () => request('GET', '/reports'),

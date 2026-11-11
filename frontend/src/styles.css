@@ -412,3 +412,24 @@ h3.sub { margin: 6px 0 0; font-size: 0.95rem; }
 .regime-result tr.subtotal td { border-top: 1px solid #e3e9e7; font-weight: 600; }
 .regime-result tr.total td { border-top: 2px solid var(--ink, #1b2a38); font-weight: 700; }
 .regime-result tr.muted td { color: var(--muted); }
+
+/* --- search on the main screen ------------------------------------------------------------- */
+.global-search { position: relative; flex: 1; max-width: 460px; min-width: 220px; margin-left: auto; }
+.global-search input { width: 100%; padding: 9px 36px 9px 34px; border-radius: 12px; background: #fff; }
+.global-search input::-webkit-search-cancel-button { display: none; }
+.gs-glass { position: absolute; left: 11px; top: 50%; transform: translateY(-50%); color: var(--muted); font-size: 1.05rem; pointer-events: none; }
+.gs-kbd { position: absolute; right: 9px; top: 50%; transform: translateY(-50%); font: 600 0.72rem/1 Inter, sans-serif; color: var(--muted);
+  border: 1px solid var(--line); border-radius: 5px; padding: 3px 6px; background: #f6f9f8; pointer-events: none; }
+.global-search input:focus ~ .gs-kbd { display: none; }
+.gs-menu { position: absolute; top: calc(100% + 6px); left: 0; right: 0; z-index: 30; background: #fff; border: 1px solid var(--line);
+  border-radius: 12px; box-shadow: 0 14px 34px rgba(16, 37, 66, 0.16); padding: 6px; max-height: 420px; overflow-y: auto; }
+.gs-menu ul { list-style: none; margin: 0; padding: 0; }
+.gs-menu li[role='option'] { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 8px; cursor: pointer; }
+.gs-menu li.active { background: var(--brand-soft); }
+.gs-group { padding: 8px 10px 4px; font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); }
+.gs-icon { flex: none; width: 28px; height: 28px; border-radius: 8px; display: grid; place-items: center; background: #eef2f1; color: var(--brand); }
+.gs-text { display: flex; flex-direction: column; min-width: 0; }
+.gs-text strong { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.gs-empty { padding: 10px; margin: 0; }
+.gs-menu .banner { margin: 4px; }
+@media (max-width: 720px) { .global-search { order: 3; max-width: none; flex-basis: 100%; } .gs-kbd { display: none; } }

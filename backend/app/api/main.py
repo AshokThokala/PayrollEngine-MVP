@@ -30,6 +30,7 @@ from ..services.billing import PLANS, BillingService
 from ..services.onboarding import all_clients, client_checklist
 from ..services.employee_onboarding import EmployeeOnboardingService
 from ..services import tax as tax_rules
+from ..services.search import search as run_search
 from . import errors
 from . import schemas as s
 
@@ -643,3 +644,11 @@ def tax_calculate(body: s.TaxCalcIn, actor: User = Depends(current_user),
     data = body.model_dump()
     on = data.pop("on") or svc.clock().date()
     return tax_rules.calculate(svc, on, data)
+
+
+# --- search (main screen) ----------------------------------------------------------------------
+
+@app.get("/search")
+def search(q: str = "", actor: User = Depends(admin_user), svc: PayrollService = Depends(get_service)):
+    """Clients (by name, ID or PAN) and employees (by name or code) the user can see."""
+    return run_search(svc, actor, q)

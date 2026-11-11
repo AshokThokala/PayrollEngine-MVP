@@ -37,6 +37,9 @@ Passwords are hashed with scrypt; logins last 12 hours. Set `SECRET_KEY` (see `b
 A payroll run must be approved by a different admin from the one who calculated it.
 
 ### Working in the app
+- **Search** (top of every admin page; press `/` or Ctrl/⌘+K): finds clients by name, ID or PAN and employees by name
+  or code, across every client a platform admin can see (client admins: their own employees). Arrow keys and Enter
+  pick a result: a client opens its details, an employee switches to their client and opens their record.
 - **Switch clients** with the client button at the top right (search by name or ID). Client admins see only their company.
 - **Click a client or employee row** to open its details and edit them; *+ Add client* / *+ Add employee* open the add form.
 - **View as employee** (on an employee's details) opens the employee portal exactly as that employee sees it,
