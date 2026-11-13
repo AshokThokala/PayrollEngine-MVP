@@ -99,6 +99,12 @@ admin (maker-checker).
 Not yet covered: perquisites, employer NPS (80CCD(2)), income from other sources or a previous employer.
 
 
+## Deploying to production
+
+AWS Lightsail (Mumbai) with the GoDaddy domain: follow **[deploy/LIGHTSAIL.md](deploy/LIGHTSAIL.md)**. In short:
+`deploy/setup-server.sh` once, fill in `deploy/.env`, then `deploy/deploy.sh` for every release. The production stack
+(`deploy/docker-compose.prod.yml`) adds Caddy for automatic HTTPS, keeps the database private, and backs it up nightly.
+
 ## Email
 
 Invites and onboarding updates are sent over SMTP (`backend/app/mailer.py`, standard library only). With Docker

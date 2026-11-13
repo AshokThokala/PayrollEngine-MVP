@@ -1,0 +1,22 @@
+# HTTPS in front of the app. Caddy gets a free Let's Encrypt certificate for DOMAIN and www.DOMAIN
+# as soon as both names point at this server (GoDaddy DNS), and renews it on its own.
+{
+	email {$ACME_EMAIL}
+}
+
+www.{$DOMAIN} {
+	redir https://{$DOMAIN}{uri} permanent
+}
+
+{$DOMAIN} {
+	encode zstd gzip
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		Permissions-Policy "camera=(), microphone=(), geolocation=()"
+		-Server
+	}
+	reverse_proxy web:80
+}
