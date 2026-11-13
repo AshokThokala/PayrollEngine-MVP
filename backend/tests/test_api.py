@@ -292,3 +292,13 @@ def test_search_api(client, ops):
     assert r["employees"][0]["code"] == "E1" and r["employees"][0]["active"] is True
     assert client.get("/search?q=acm", headers=ops).json() == {"query": "acm", "employees": []}
     assert client.get("/search?q=ra").status_code == 401
+
+
+def test_add_user_api(client, ops):
+    client.post("/clients", headers=ops, json={"id": "acme", "legal_name": "Acme", "state": "TG"})
+    r = client.post("/users", headers=ops, json={"name": "Ravi", "email": "ravi@acme.in",
+                                                 "password": "Payroll123", "client_id": "acme"})
+    assert r.status_code == 201 and r.json()["client_id"] == "acme" and r.json()["status"] == "active"
+    r = client.post("/users", headers=ops, json={"name": "", "email": "bad", "password": "x"})
+    assert r.status_code == 422 and {e["field"] for e in r.json()["errors"]} == {"name", "email", "password"}
+    assert client.post("/users", json={"name": "A", "email": "a@b.in", "password": "Payroll123"}).status_code == 401

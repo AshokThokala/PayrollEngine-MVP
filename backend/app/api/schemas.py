@@ -298,3 +298,10 @@ class TaxCalcIn(BaseModel):
     age_group: str = "below_60"
     metro_city: bool = False
     parents_senior: bool = False
+
+
+class UserIn(BaseModel):
+    name: str
+    email: str
+    password: str
+    client_id: str | None = None  # empty = platform admin (platform admins only)

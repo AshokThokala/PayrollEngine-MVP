@@ -146,3 +146,27 @@ def test_edit_client_and_employee(repo):
     assert e.structure.components["special_allowance"] == 15000
     assert len(warnings) == 1  # basic below 50%
     assert repo.audit_log()[-1].detail == "changed: name, pt_applicable, salary"
+
+
+def test_add_admin_users(repo):
+    svc, a = setup(repo)
+    ops = a.create_platform_admin("ops@cp.in", "Payroll123")
+    asha = a.signup_client(Client(id="acme", legal_name="Acme", state="TG"), "Asha", "asha@acme.in", "Payroll123")
+    a.signup_client(Client(id="other", legal_name="Other", state="TG"), "O", "o@other.in", "Payroll123")
+
+    p2 = a.create_admin(ops, name="Priya", email="priya@cp.in", password="Payroll123")
+    assert p2.is_platform_admin and p2.status == UserStatus.ACTIVE
+    ca = a.create_admin(ops, name="Ravi", email="ravi@acme.in", password="Payroll123", client_id="acme")
+    assert ca.client_id == "acme" and a.login("ravi@acme.in", "Payroll123")[0].id == ca.id
+    with pytest.raises(ServiceError) as exc:
+        a.create_admin(ops, name="X", email="x@cp.in", password="Payroll123", client_id="nope")
+    assert exc.value.field == "client_id"
+
+    # A client admin adds admins only to their own company, never platform admins.
+    own = a.create_admin(asha, name="Kiran", email="kiran@acme.in", password="Payroll123")
+    assert own.client_id == "acme" and not own.is_platform_admin
+    with pytest.raises(AccessDenied):
+        a.create_admin(asha, name="Y", email="y@other.in", password="Payroll123", client_id="other")
+    with pytest.raises(ServiceError) as exc:
+        a.create_admin(asha, name="", email="kiran@acme.in", password="weak")
+    assert set(exc.value.errors) == {"name", "email", "password"}

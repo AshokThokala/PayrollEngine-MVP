@@ -147,6 +147,29 @@ class AuthService:
         if not actor.can_manage(client_id):
             raise AccessDenied("You don't have access to this client")
 
+    def create_admin(self, actor: User, *, name: str, email: str, password: str,
+                     client_id: str | None = None) -> User:
+        """Add an admin login. Platform admins add platform admins (no client) or client admins;
+        client admins add admins for their own client only. Employees join through invites."""
+        if actor.role != Role.ADMIN:
+            raise AccessDenied("Admins only")
+        client_id = (client_id or "").strip() or None
+        if not actor.is_platform_admin:
+            if client_id not in (None, actor.client_id):
+                raise AccessDenied("You can only add admins for your own company")
+            client_id = actor.client_id
+        if client_id is not None:
+            try:
+                self.repo.get_client(client_id)
+            except LookupError:
+                raise ServiceError("No client with this ID", field="client_id") from None
+        user = self._new_user(email=email, name=name, password=password, role=Role.ADMIN,
+                              status=UserStatus.ACTIVE, client_id=client_id)
+        self.repo.save_user(user)
+        self.payroll._audit(actor.email, "user.create", f"user/{user.id}",
+                            f"admin for {client_id}" if client_id else "platform admin")
+        return user
+
     def list_users(self, actor: User, client_id: str | None = None) -> list[User]:
         if actor.role != Role.ADMIN:
             raise AccessDenied("Admins only")

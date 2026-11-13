@@ -38,6 +38,9 @@ The admin who processed a payroll run can approve it. Set `REQUIRE_SEPARATE_APPR
 admin (maker-checker).
 
 ### Working in the app
+- **Users and access → + Add user**: add an admin with a temporary password. Platform admins can add platform admins
+  or an admin for any client; client admins add admins for their own company. Employees join through *Employee
+  onboarding* invites instead.
 - **Employee search** (top of every admin page; press `/` or Ctrl/⌘+K): finds employees by name or code, across every
   client for platform admins (client admins: their own employees). Arrow keys and Enter pick a result, which switches
   to the employee's client and opens their record. Clients are found with the client switcher.
