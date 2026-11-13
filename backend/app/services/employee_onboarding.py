@@ -1,11 +1,13 @@
 """Employee invites, invite registration and the joining (onboarding) profile.
 
 Flow
-  1. A client admin invites an employee by email. The app makes a one-time link (valid 7 days);
-     there is no email service yet, so the admin copies the link and sends it.
+  1. A client admin invites an employee by email. The app makes a one-time link (valid 7 days) and emails it
+     (SMTP, see app/mailer.py). The link is also shown once so it can be copied if email is not set up.
   2. The employee opens the link, sets a name and password, and is logged in straight away.
   3. The employee fills in contact details, statutory IDs and bank details, then submits.
   4. An admin verifies the profile, or returns it with a note for corrections.
+Emails: invite (to the employee), submitted (to the client's admins), returned and verified (to the employee).
+Email is best effort: a failure never blocks the step, it is reported back and written to the audit log.
 
 PAN and bank account numbers are encrypted at rest; only the token's SHA-256 hash is stored for invites.
 """
@@ -18,6 +20,8 @@ import uuid
 from datetime import date, timedelta
 
 from .. import auth, crypto
+from ..mailer import MailError
+from . import emails
 from ..domain import EmployeeProfile, Invite, ProfileStatus, Role, User, UserStatus
 from .auth_service import AccessDenied, AuthService
 from .payroll_service import ServiceError
@@ -46,17 +50,42 @@ def _hash(token: str) -> str:
 
 
 class EmployeeOnboardingService:
-    def __init__(self, auth_service: AuthService):
+    def __init__(self, auth_service: AuthService, mailer=None, base_url: str = ""):
         self.auth = auth_service
         self.payroll = auth_service.payroll
         self.repo = auth_service.repo
+        self.mailer = mailer
+        self.base_url = base_url.rstrip("/")
+
+    # --- email (best effort) ------------------------------------------------------------------
+    def _deliver(self, email, actor_email: str, entity: str) -> dict:
+        """Send one email. Returns {'sent': bool, 'to': ..., 'error': ...}; never raises."""
+        if self.mailer is None or not getattr(self.mailer, "enabled", False):
+            return {"sent": False, "to": email.to, "error": "Email is not set up on this server"}
+        if not self.base_url:
+            return {"sent": False, "to": email.to, "error": "APP_URL is not set, so links cannot be built"}
+        try:
+            self.mailer.send(email)
+        except MailError as exc:
+            self.payroll._audit(actor_email, "email.failed", entity, f"{email.subject} -> {email.to}: {exc}")
+            return {"sent": False, "to": email.to, "error": str(exc)}
+        self.payroll._audit(actor_email, "email.sent", entity, f"{email.subject} -> {email.to}")
+        return {"sent": True, "to": email.to, "error": None}
+
+    def _link(self, path: str = "/") -> str:
+        return f"{self.base_url}{path}"
+
+    def _employee_user(self, client_id: str, code: str) -> User | None:
+        return next((u for u in self.repo.list_users(client_id)
+                     if u.role == Role.EMPLOYEE and u.employee_code == code), None)
 
     def _now(self):
         return self.payroll.clock()
 
     # --- invites ---------------------------------------------------------------------------
-    def invite(self, actor: User, client_id: str, employee_code: str, email: str) -> tuple[Invite, str]:
-        """Make an invite link for one employee. Any earlier open invite for them stops working."""
+    def invite(self, actor: User, client_id: str, employee_code: str, email: str) -> tuple[Invite, str, dict]:
+        """Make an invite link for one employee and email it. Any earlier open invite for them stops working.
+        Returns (invite, token, delivery) where delivery says whether the email went out."""
         self.auth.check_client(actor, client_id)
         record = self.repo.get_employee(client_id, employee_code)
         if record.exited_on:
@@ -79,8 +108,13 @@ class EmployeeOnboardingService:
                         token_hash=_hash(token), created_by=actor.email, created_at=now,
                         expires_at=now + timedelta(days=INVITE_DAYS))
         self.repo.save_invite(invite)
-        self.payroll._audit(actor.email, "invite.create", f"employee/{client_id}/{employee_code}", email)
-        return invite, token
+        entity = f"employee/{client_id}/{employee_code}"
+        self.payroll._audit(actor.email, "invite.create", entity, email)
+        client = self.repo.get_client(client_id)
+        delivery = self._deliver(emails.invite(email, record.employee.name, client.legal_name,
+                                               self._link(f"/invite/{token}"), invite.expires_at),
+                                 actor.email, entity)
+        return invite, token, delivery
 
     def revoke(self, actor: User, invite_id: str) -> Invite:
         invite = self.repo.get_invite(invite_id)
@@ -203,8 +237,15 @@ class EmployeeOnboardingService:
         if submit:
             p.status, p.submitted_at = ProfileStatus.SUBMITTED, self._now()
         self.repo.save_profile(p)
-        self.payroll._audit(actor.email, "profile.submit" if submit else "profile.save",
-                            f"employee/{client_id}/{code}")
+        entity = f"employee/{client_id}/{code}"
+        self.payroll._audit(actor.email, "profile.submit" if submit else "profile.save", entity)
+        if submit:
+            client = self.repo.get_client(client_id)
+            name = self.repo.get_employee(client_id, code).employee.name
+            for admin in self.repo.list_users(client_id):
+                if admin.role == Role.ADMIN and admin.status == UserStatus.ACTIVE:
+                    self._deliver(emails.submitted(admin.email, name, code, client.legal_name, self._link()),
+                                  actor.email, entity)
         return self._out(p, reveal=True)
 
     # --- admin ---------------------------------------------------------------------------------
@@ -226,9 +267,16 @@ class EmployeeOnboardingService:
         else:
             p.status, p.note = ProfileStatus.RETURNED, note.strip()
         self.repo.save_profile(p)
-        self.payroll._audit(actor.email, "profile.verify" if approve else "profile.return",
-                            f"employee/{client_id}/{code}", note.strip())
-        return self._out(p, reveal=True)
+        entity = f"employee/{client_id}/{code}"
+        self.payroll._audit(actor.email, "profile.verify" if approve else "profile.return", entity, note.strip())
+        out = self._out(p, reveal=True)
+        user = self._employee_user(client_id, code)
+        if user:
+            client = self.repo.get_client(client_id)
+            email = (emails.verified(user.email, user.name, client.legal_name, self._link()) if approve else
+                     emails.returned(user.email, user.name, client.legal_name, p.note, self._link()))
+            out["email"] = self._deliver(email, actor.email, entity)
+        return out
 
     def status_list(self, actor: User, client_id: str) -> list[dict]:
         """One row per current employee: where they are in invite → registration → onboarding."""

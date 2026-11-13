@@ -88,6 +88,14 @@ jobs:
           -H "Authorization: Bearer $TOKEN" -d '{"id":"ci-test","legal_name":"CI Test","state":"TG"}'
         curl -fs http://localhost:8080/api/clients -H "Authorization: Bearer $TOKEN" | grep -q ci-test
         echo "Stack is up and data is stored in Postgres"
+        # Employee invite is emailed (Mailpit catches it)
+        curl -fs -X POST http://localhost:8080/api/clients/ci-test/employees -H 'Content-Type: application/json' \
+          -H "Authorization: Bearer $TOKEN" \
+          -d '{"code":"E1","name":"Ravi","joined_on":"2026-04-01","components":{"basic":30000}}' > /dev/null
+        curl -fs -X POST http://localhost:8080/api/clients/ci-test/employees/E1/invite -H 'Content-Type: application/json' \
+          -H "Authorization: Bearer $TOKEN" -d '{"email":"ravi@example.com"}' | grep -q '"email_sent":true'
+        curl -fs http://localhost:8025/api/v1/messages | grep -q 'ravi@example.com'
+        echo "Invite email delivered to Mailpit"
     - name: Logs on failure
       if: failure()
       run: docker compose logs

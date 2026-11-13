@@ -40,7 +40,7 @@ def test_invite_register_and_reuse(world):
     eo, admin, outsider = world
     with pytest.raises(AccessDenied):
         eo.invite(outsider, "acme", "E1", "ravi@acme.in")
-    invite, token = eo.invite(admin, "acme", "E1", "Ravi@Acme.in")
+    invite, token, _ = eo.invite(admin, "acme", "E1", "Ravi@Acme.in")
     assert invite.token_hash != token and invite.expires_at == NOW[0] + timedelta(days=7)
     info = eo.lookup(token)
     assert info["employee_name"] == "Ravi E1" and info["email"] == "ravi@acme.in"
@@ -58,8 +58,8 @@ def test_invite_register_and_reuse(world):
 
 def test_new_invite_replaces_old_and_expiry(world):
     eo, admin, _ = world
-    _, first = eo.invite(admin, "acme", "E2", "e2@acme.in")
-    _, second = eo.invite(admin, "acme", "E2", "e2@acme.in")
+    _, first, _ = eo.invite(admin, "acme", "E2", "e2@acme.in")
+    _, second, _ = eo.invite(admin, "acme", "E2", "e2@acme.in")
     with pytest.raises(ServiceError, match="not valid"):
         eo.lookup(first)
     NOW[0] += timedelta(days=8)
@@ -70,7 +70,7 @@ def test_new_invite_replaces_old_and_expiry(world):
 
 def test_profile_save_submit_verify(world, repo):
     eo, admin, _ = world
-    _, token = eo.invite(admin, "acme", "E1", "ravi@acme.in")
+    _, token, _ = eo.invite(admin, "acme", "E1", "ravi@acme.in")
     ravi = eo.accept(token, "Ravi", "Payroll123")
 
     draft = eo.save_my_profile(ravi, {"phone": "98765 43210", "pan": "abcde1234f"})
@@ -102,8 +102,80 @@ def test_profile_save_submit_verify(world, repo):
 
 def test_profile_validation(world):
     eo, admin, _ = world
-    _, token = eo.invite(admin, "acme", "E2", "e2@acme.in")
+    _, token, _ = eo.invite(admin, "acme", "E2", "e2@acme.in")
     user = eo.accept(token, "E2", "Payroll123")
     with pytest.raises(ServiceError) as e:
         eo.save_my_profile(user, {"pan": "ABC", "phone": "12345", "date_of_birth": "2020-01-01", "pincode": "0123"})
     assert set(e.value.errors) == {"pan", "phone", "date_of_birth", "pincode"}
+
+
+def test_emails_for_each_step(world, repo):
+    from app.mailer import Outbox
+    eo, admin, _ = world
+    box = Outbox()
+    eo.mailer, eo.base_url = box, "https://app.clearpay4u.com"
+    invite, token, delivery = eo.invite(admin, "acme", "E1", "ravi@acme.in")
+    assert delivery == {"sent": True, "to": "ravi@acme.in", "error": None}
+    mail = box.sent[-1]
+    assert mail.to == "ravi@acme.in" and "Acme" in mail.subject
+    assert f"https://app.clearpay4u.com/invite/{token}" in mail.text and token in mail.html
+
+    ravi = eo.accept(token, "Ravi Kumar", "Payroll123")
+    eo.save_my_profile(ravi, GOOD, submit=True)
+    assert box.sent[-1].to == "asha@acme.in" and "submitted" in box.sent[-1].subject
+    out = eo.review(admin, "acme", "E1", approve=False, note="Fix the IFSC")
+    assert out["email"]["sent"] and box.sent[-1].to == "ravi@acme.in" and "Fix the IFSC" in box.sent[-1].text
+    eo.save_my_profile(ravi, GOOD, submit=True)
+    eo.review(admin, "acme", "E1", approve=True)
+    assert "verified" in box.sent[-1].subject
+    assert any(e.action == "email.sent" for e in repo.audit_log())
+
+
+def test_email_problems_do_not_block(world, repo):
+    from app.mailer import Outbox
+    eo, admin, _ = world
+    _, token, delivery = eo.invite(admin, "acme", "E1", "ravi@acme.in")  # no mailer
+    assert delivery["sent"] is False and "not set up" in delivery["error"]
+    eo.mailer, eo.base_url = Outbox(fail=True), "https://app"
+    _, token, delivery = eo.invite(admin, "acme", "E2", "e2@acme.in")
+    assert delivery["sent"] is False and eo.lookup(token)["employee_code"] == "E2"
+    assert any(e.action == "email.failed" for e in repo.audit_log())
+    eo.mailer, eo.base_url = Outbox(), ""
+    assert "APP_URL" in eo.invite(admin, "acme", "E2", "e2@acme.in")[2]["error"]
+
+
+def test_smtp_mailer_sends(monkeypatch):
+    from app.mailer import Email, MailError, SmtpMailer
+    sent = {}
+
+    class FakeSMTP:
+        def __init__(self, host, port, timeout):
+            sent["addr"] = (host, port)
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+        def starttls(self, context):
+            sent["tls"] = True
+
+        def login(self, user, password):
+            sent["login"] = user
+
+        def send_message(self, msg):
+            sent["msg"] = msg
+
+    monkeypatch.setattr("smtplib.SMTP", FakeSMTP)
+    m = SmtpMailer({"SMTP_HOST": "smtp.example.com", "SMTP_USER": "u", "SMTP_PASSWORD": "p",
+                    "SMTP_FROM": "CP4U <p@x.in>"})
+    m.send(Email("a@b.in", "Hi", "text", "<p>html</p>"))
+    assert sent["addr"] == ("smtp.example.com", 587) and sent["tls"] and sent["login"] == "u"
+    assert sent["msg"]["To"] == "a@b.in" and sent["msg"].is_multipart()
+    with pytest.raises(MailError):
+        SmtpMailer({}).send(Email("a@b.in", "Hi", "t"))
+    plain = SmtpMailer({"SMTP_HOST": "mailpit", "SMTP_PORT": "1025", "SMTP_SECURITY": "none"})
+    sent.clear()
+    plain.send(Email("a@b.in", "Hi", "t"))
+    assert sent["addr"] == ("mailpit", 1025) and "tls" not in sent and "login" not in sent
