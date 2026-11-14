@@ -182,13 +182,25 @@ function AdminShell({ user, onLogout, onViewAs }) {
   }, [tab, current])
   const disabled = (id) => PAGES[id].needsClient && !clientId
   const [railOnly, setRailOnly] = useStored('cp4u.sidebar.collapsed', false) // icons only
+  const [menuHidden, setMenuHidden] = useStored('cp4u.sidebar.hidden', false) // no sidebar at all
+  // Ctrl/⌘ + B shows or hides the menu.
+  useEffect(() => {
+    const onKey = (e) => {
+      if (e.key.toLowerCase() === 'b' && (e.ctrlKey || e.metaKey)) {
+        e.preventDefault()
+        setMenuHidden((h) => !h)
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [setMenuHidden])
   const [closedGroups, setClosedGroups] = useStored('cp4u.sidebar.closedGroups', [])
   const toggleGroup = (g) => setClosedGroups((list) => (list.includes(g) ? list.filter((x) => x !== g) : [...list, g]))
   const currentGroup = menu.find((g) => g.items.some((i) => i.id === current?.id))?.group
 
   return (
-    <div className={railOnly ? 'shell rail' : 'shell'}>
-      <aside className="sidebar">
+    <div className={`shell${railOnly ? ' rail' : ''}${menuHidden ? ' menu-hidden' : ''}`}>
+      <aside className="sidebar" hidden={menuHidden} aria-hidden={menuHidden || undefined}>
         <div className="brand">
           <span className="logo">C4U</span>
           <span className="brand-text">
@@ -247,6 +259,12 @@ function AdminShell({ user, onLogout, onViewAs }) {
 
       <div className="main-col">
         <header className="topbar">
+          <button type="button" className="menu-toggle" onClick={() => setMenuHidden(!menuHidden)}
+            aria-label={menuHidden ? 'Show menu' : 'Hide menu'} title={`${menuHidden ? 'Show' : 'Hide'} menu (Ctrl+B)`}
+            aria-expanded={!menuHidden}>
+            <span aria-hidden="true">{menuHidden ? '☰' : '⇤'}</span>
+          </button>
+          {menuHidden && <span className="logo topbar-logo" aria-hidden="true">C4U</span>}
           <h1 className="page-title">{current?.label || PAGES[tab]?.label}</h1>
           <GlobalSearch
             platform={platform}
