@@ -64,7 +64,7 @@ export default function EmployeesPage({ client, onViewAs, openRequest }) {
   useEffect(() => {
     api.clientLocations(client.id).then(setLocations).catch(() => setLocations([]))
   }, [client.id])
-  const locationName = (id) => locations.find((l) => l.id === id)?.name
+  const locationName = (id) => (locations.find((l) => l.id === id) || (!id && locations.find((l) => l.head_office)))?.name
   const [profileFacts, setProfileFacts] = useState({}) // gender and date of birth for the header, from EmployeeDetails
   useEffect(() => { setProfileFacts({}) }, [selectedCode])
   const [payCodes, setPayCodes] = useState([])
