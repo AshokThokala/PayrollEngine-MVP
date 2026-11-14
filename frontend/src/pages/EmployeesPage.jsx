@@ -4,7 +4,8 @@ import { api, money, today } from '../api.js'
 import InfoTip from '../components/InfoTip.jsx'
 import TaxFields, { EMPTY_TAX, taxFromEmployee } from '../components/TaxFields.jsx'
 
-const COMPONENTS = [
+// Fallback until the client's salary pay codes load.
+const DEFAULT_COMPONENTS = [
   ['basic', 'Basic'],
   ['da', 'DA'],
   ['hra', 'HRA'],
@@ -26,9 +27,10 @@ const EMPTY = {
   esi: 'auto', pf_member: true, eps_member: true, pf_on_full_wages: false, pt_applicable: true, lwf_applicable: true,
 }
 
-function formFrom(emp) {
+function formFrom(emp, list) {
   const f = { ...EMPTY, code: emp.code, name: emp.name, joined_on: emp.joined_on }
-  COMPONENTS.forEach(([k]) => { f[k] = emp.components[k] !== undefined ? String(Number(emp.components[k])) : '' })
+  const keys = new Set([...list.map(([k]) => k), ...Object.keys(emp.components)])
+  ;[...keys].forEach((k) => { f[k] = emp.components[k] !== undefined ? String(Number(emp.components[k])) : '' })
   Object.entries(emp.flags || {}).forEach(([k, v]) => {
     if (k === 'esi_covered') f.esi = v === null ? 'auto' : v ? 'yes' : 'no'
     else f[k] = v
@@ -54,6 +56,19 @@ export default function EmployeesPage({ client, onViewAs, openRequest }) {
   const [busy, setBusy] = useState(false)
   const [loadedFor, setLoadedFor] = useState(null)
   const handled = useRef(null)
+  // Salary fields = the fixed pay codes this client uses (Client pay codes), with their payslip names.
+  const [payCodes, setPayCodes] = useState([])
+  useEffect(() => {
+    api.availablePayCodes(client.id).then((list) => setPayCodes(list.filter((p) => p.kind === 'fixed'))).catch(() => setPayCodes([]))
+  }, [client.id])
+  const COMPONENTS = payCodes.length ? payCodes.map((p) => [p.code, p.payslip_label || p.name]) : DEFAULT_COMPONENTS
+  const suggestion = (k) => {
+    const p = payCodes.find((x) => x.code === k)
+    if (!p || p.default_value == null) return undefined
+    return p.calc === 'percent_basic'
+      ? (Number(form.basic) ? String(Math.round(Number(form.basic) * Number(p.default_value) / 100)) : `${Number(p.default_value)}% of basic`)
+      : String(Number(p.default_value))
+  }
 
   const load = useCallback(async () => {
     try {
@@ -81,14 +96,17 @@ export default function EmployeesPage({ client, onViewAs, openRequest }) {
 
   const set = (key) => (e) => {
     setForm({ ...form, [key]: e.target.type === 'checkbox' ? e.target.checked : e.target.value })
-    const errorKey = COMPONENTS.some(([k]) => k === key) ? 'components' : key
+    const errorKey = FIELDS.some(([k]) => k === key) ? 'components' : key
     if (fieldErrors[errorKey]) setFieldErrors({ ...fieldErrors, [errorKey]: undefined })
   }
   const invalid = (key) => (fieldErrors[key] ? { className: 'invalid', 'aria-invalid': true } : {})
 
-  const total = COMPONENTS.reduce((sum, [k]) => sum + (Number(form[k]) || 0), 0)
+  // Pay codes shown: the client's, plus any the selected employee still has.
+  const extra = mode === 'edit' && selected ? Object.keys(selected.components).filter((k) => !COMPONENTS.some(([c]) => c === k)) : []
+  const FIELDS = [...COMPONENTS, ...extra.map((k) => [k, `${k} (not used by client)`])]
+  const total = FIELDS.reduce((sum, [k]) => sum + (Number(form[k]) || 0), 0)
   const wageShare = total ? (Number(form.basic || 0) + Number(form.da || 0)) / total : 1
-  const components = () => Object.fromEntries(COMPONENTS.filter(([k]) => Number(form[k]) > 0).map(([k]) => [k, Number(form[k])]))
+  const components = () => Object.fromEntries(FIELDS.filter(([k]) => Number(form[k]) > 0).map(([k]) => [k, Number(form[k])]))
   const flags = () => ({
     ...Object.fromEntries(FLAGS.map(([k]) => [k, form[k]])),
     esi_covered: form.esi === 'auto' ? null : form.esi === 'yes',
@@ -108,7 +126,7 @@ export default function EmployeesPage({ client, onViewAs, openRequest }) {
     reset()
     setMode('edit')
     setSelectedCode(emp.code)
-    setForm(formFrom(emp))
+    setForm(formFrom(emp, COMPONENTS))
     setTax(taxFromEmployee(emp))
     setExitOn('')
   }
@@ -185,9 +203,9 @@ export default function EmployeesPage({ client, onViewAs, openRequest }) {
   const salaryFields = (
     <fieldset>
       <legend>Monthly salary (₹)</legend>
-      {COMPONENTS.map(([k, label]) => (
+      {FIELDS.map(([k, label]) => (
         <label key={k} className="row-label">{label}
-          <input type="number" min="0" step="0.01" value={form[k]} onChange={set(k)} />
+          <input type="number" min="0" step="0.01" value={form[k] ?? ''} onChange={set(k)} placeholder={suggestion(k)} />
         </label>
       ))}
       <FieldError label="Monthly salary" error={fieldErrors.components} />

@@ -11,7 +11,8 @@ from datetime import date, datetime
 from decimal import Decimal
 from typing import Any, Iterator
 
-from ..domain import (AuditEvent, BillingPlan, Client, ClientDeduction, DeductionCalc, DeductionCategory, DeductionType,
+from ..domain import (AuditEvent, BillingPlan, Client, ClientDeduction, ClientPayCode, PayCode, PayCodeKind,
+                      PayCodeTax, DeductionCalc, DeductionCategory, DeductionType,
                       EmployeeDeduction, EmployeeProfile, EmployeeRecord, Filing, FilingStatus,
                       Invite, Invoice, InvoiceStatus, PayrollRun, ProfileStatus, Role, RunStatus, RunSummary, StatutoryRule, User,
                       UserStatus)
@@ -465,6 +466,51 @@ class SqlRepository:
             else:
                 c.run(f"INSERT INTO deduction_types ({self._DT_COLS}) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                       t.code, *args)
+
+    _PC_COLS = ("code, name, kind, tax, calc, default_value, payslip_label, tax_section, description, core,"
+                " active, system")
+
+    @staticmethod
+    def _paycode(row) -> PayCode:
+        code, name, kind, tax, calc, dv, label, sec, desc, core, active, system = row
+        return PayCode(code, name, PayCodeKind(kind), PayCodeTax(tax), calc, None if dv is None else _dec(dv),
+                       label or "", sec or "", desc or "", bool(core), bool(active), bool(system))
+
+    def list_pay_codes(self) -> list[PayCode]:
+        with self._tx() as c:
+            rows = c.all(f"SELECT {self._PC_COLS} FROM pay_codes")
+        return sorted((self._paycode(r) for r in rows), key=lambda p: (p.kind.value, not p.core, p.name.lower()))
+
+    def get_pay_code(self, code: str) -> PayCode | None:
+        with self._tx() as c:
+            row = c.one(f"SELECT {self._PC_COLS} FROM pay_codes WHERE code = ?", code)
+        return self._paycode(row) if row else None
+
+    def save_pay_code(self, p: PayCode) -> None:
+        with self._tx() as c:
+            args = (p.name, p.kind.value, p.tax.value, p.calc, p.default_value, p.payslip_label, p.tax_section,
+                    p.description, p.core, p.active, p.system)
+            if c.one("SELECT 1 FROM pay_codes WHERE code = ?", p.code):
+                c.run("UPDATE pay_codes SET name = ?, kind = ?, tax = ?, calc = ?, default_value = ?, payslip_label = ?,"
+                      " tax_section = ?, description = ?, core = ?, active = ?, system = ? WHERE code = ?",
+                      *args, p.code)
+            else:
+                c.run(f"INSERT INTO pay_codes ({self._PC_COLS}) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                      p.code, *args)
+
+    def list_client_pay_codes(self, client_id: str) -> list[ClientPayCode]:
+        with self._tx() as c:
+            rows = c.all("SELECT client_id, pay_code, enabled, default_value, payslip_label FROM client_pay_codes"
+                         " WHERE client_id = ? ORDER BY pay_code", client_id)
+        return [ClientPayCode(cid, code, bool(en), None if dv is None else _dec(dv), label or "")
+                for cid, code, en, dv, label in rows]
+
+    def save_client_pay_code(self, cp: ClientPayCode) -> None:
+        with self._tx() as c:
+            c.run("DELETE FROM client_pay_codes WHERE client_id = ? AND pay_code = ?", cp.client_id, cp.pay_code)
+            c.run("INSERT INTO client_pay_codes (client_id, pay_code, enabled, default_value, payslip_label)"
+                  " VALUES (?, ?, ?, ?, ?)", cp.client_id, cp.pay_code, cp.enabled, cp.default_value,
+                  cp.payslip_label)
 
     def list_client_deductions(self, client_id: str) -> list[ClientDeduction]:
         with self._tx() as c:

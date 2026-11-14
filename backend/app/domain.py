@@ -307,3 +307,43 @@ class ClientDeduction:
     default_value: Decimal | None = None
     max_amount: Decimal | None = None
     payslip_label: str = ""
+
+
+# --- pay codes (earnings): master, client, employee -------------------------------------------
+
+class PayCodeKind(str, enum.Enum):
+    FIXED = "fixed"        # part of the monthly salary structure (basic, HRA, allowances)
+    VARIABLE = "variable"  # entered for a payroll month (bonus, incentive, arrears, overtime)
+
+
+class PayCodeTax(str, enum.Enum):
+    TAXABLE = "taxable"
+    PARTLY_EXEMPT = "partly_exempt"  # exempt up to a limit or on proof (HRA, LTA, children education)
+    EXEMPT = "exempt"                # reimbursements on bills, within limits
+
+
+@dataclass
+class PayCode:
+    """One kind of pay an employee can get, from the master list."""
+
+    code: str
+    name: str
+    kind: PayCodeKind
+    tax: PayCodeTax = PayCodeTax.TAXABLE
+    calc: str = "fixed"                   # default calculation: "fixed" (₹) or "percent_basic"
+    default_value: Decimal | None = None
+    payslip_label: str = ""
+    tax_section: str = ""                 # e.g. 10(13A) for HRA, 10(5) for LTA
+    description: str = ""
+    core: bool = False                    # on for every client unless the client switches it off
+    active: bool = True
+    system: bool = False
+
+
+@dataclass
+class ClientPayCode:
+    client_id: str
+    pay_code: str
+    enabled: bool = True
+    default_value: Decimal | None = None
+    payslip_label: str = ""

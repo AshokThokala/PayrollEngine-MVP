@@ -9,7 +9,7 @@ from datetime import date
 from decimal import Decimal
 from typing import Protocol
 
-from .domain import (AuditEvent, BillingPlan, Client, ClientDeduction, DeductionType, EmployeeDeduction, EmployeeProfile, EmployeeRecord, Filing, Invite, Invoice,
+from .domain import (AuditEvent, BillingPlan, Client, ClientDeduction, ClientPayCode, PayCode, DeductionType, EmployeeDeduction, EmployeeProfile, EmployeeRecord, Filing, Invite, Invoice,
                      PayrollRun, RunStatus, RunSummary, StatutoryRule, User)
 from .engine.models import Payslip
 
@@ -64,6 +64,11 @@ class Repository(Protocol):
     def list_deduction_types(self) -> list[DeductionType]: ...
     def get_deduction_type(self, code: str) -> DeductionType | None: ...
     def save_deduction_type(self, t: DeductionType) -> None: ...
+    def list_pay_codes(self) -> list[PayCode]: ...
+    def get_pay_code(self, code: str) -> PayCode | None: ...
+    def save_pay_code(self, p: PayCode) -> None: ...
+    def list_client_pay_codes(self, client_id: str) -> list[ClientPayCode]: ...
+    def save_client_pay_code(self, cp: ClientPayCode) -> None: ...
     def list_client_deductions(self, client_id: str) -> list[ClientDeduction]: ...
     def save_client_deduction(self, cd: ClientDeduction) -> None: ...
     def list_employee_deductions(self, client_id: str, employee_code: str | None = None) -> list[EmployeeDeduction]: ...
@@ -88,6 +93,8 @@ class InMemoryRepository:
         self._deduction_types: dict[str, DeductionType] = {}
         self._employee_deductions: dict[str, EmployeeDeduction] = {}
         self._client_deductions: dict[tuple[str, str], ClientDeduction] = {}
+        self._pay_codes: dict[str, PayCode] = {}
+        self._client_pay_codes: dict[tuple[str, str], ClientPayCode] = {}
         self._profiles: dict[tuple[str, str], EmployeeProfile] = {}
         self._plans: dict[str, BillingPlan] = {}
         self._invoices: dict[str, Invoice] = {}
@@ -207,6 +214,24 @@ class InMemoryRepository:
 
     def save_deduction_type(self, t: DeductionType) -> None:
         self._deduction_types[t.code] = t
+
+    def list_pay_codes(self) -> list[PayCode]:
+        return sorted(self._pay_codes.values(), key=lambda p: (p.kind.value, not p.core, p.name.lower()))
+
+    def get_pay_code(self, code: str) -> PayCode | None:
+        return self._pay_codes.get(code)
+
+    def save_pay_code(self, p: PayCode) -> None:
+        self._pay_codes[p.code] = p
+
+    def list_client_pay_codes(self, client_id: str) -> list[ClientPayCode]:
+        return [cp for (cid, _), cp in sorted(self._client_pay_codes.items()) if cid == client_id]
+
+    def save_client_pay_code(self, cp: ClientPayCode) -> None:
+        self.get_client(cp.client_id)
+        if cp.pay_code not in self._pay_codes:
+            raise ValueError(f"Unknown pay code {cp.pay_code!r}")
+        self._client_pay_codes[(cp.client_id, cp.pay_code)] = cp
 
     def list_client_deductions(self, client_id: str) -> list[ClientDeduction]:
         return [cd for (cid, _), cd in sorted(self._client_deductions.items()) if cid == client_id]

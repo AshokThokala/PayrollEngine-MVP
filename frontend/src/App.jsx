@@ -8,6 +8,9 @@ import ClientOnboardingPage from './pages/ClientOnboardingPage.jsx'
 import ClientsPage from './pages/ClientsPage.jsx'
 import EmployeesPage from './pages/EmployeesPage.jsx'
 import ClientDeductionsPage from './pages/ClientDeductionsPage.jsx'
+import ClientPayCodesPage from './pages/ClientPayCodesPage.jsx'
+import EmployeePayPage from './pages/EmployeePayPage.jsx'
+import PayCodesPage from './pages/PayCodesPage.jsx'
 import DeductionsPage from './pages/DeductionsPage.jsx'
 import EmployeeDeductionsPage from './pages/EmployeeDeductionsPage.jsx'
 import EmployeeOnboardingPage from './pages/EmployeeOnboardingPage.jsx'
@@ -82,6 +85,8 @@ const NAV = [
   { id: 'onboarding', label: 'Client onboarding', icon: '✓', needsClient: true },
   { id: 'employees', label: 'Employees', icon: '☺', needsClient: true },
   { id: 'employee-onboarding', label: 'Employee onboarding', icon: '✉', needsClient: true },
+  { id: 'client-paycodes', label: 'Client pay codes', icon: '⊞', needsClient: true },
+  { id: 'employee-pay', label: 'Employee pay', icon: '⊕', needsClient: true },
   { id: 'client-deductions', label: 'Client deductions', icon: '⊟', needsClient: true },
   { id: 'employee-deductions', label: 'Employee deductions', icon: '⊖', needsClient: true },
   { id: 'runs', label: 'Payroll runs', icon: '₹', needsClient: true },
@@ -91,6 +96,7 @@ const NAV = [
   { id: 'billing', label: 'Billing', icon: '◫', needsClient: true },
   { id: 'rules', label: 'Compliance rules', icon: '§', platformOnly: true },
   { id: 'tax', label: 'Tax rules', icon: '%' },
+  { id: 'paycodes', label: 'Pay code master', icon: '+', platformOnly: true },
   { id: 'deductions', label: 'Deduction master', icon: '−', platformOnly: true },
 ]
 
@@ -207,6 +213,9 @@ function AdminShell({ user, onLogout, onViewAs }) {
           )}
           {tab === 'users' && <UsersPage user={user} clients={clients} />}
           {tab === 'rules' && platform && <RulesPage key={ruleCategory || 'all'} initialCategory={ruleCategory} />}
+          {tab === 'paycodes' && platform && <PayCodesPage />}
+          {tab === 'client-paycodes' && client && <ClientPayCodesPage client={client} platform={platform} onGo={setTab} />}
+          {tab === 'employee-pay' && client && <EmployeePayPage client={client} onGo={setTab} />}
           {tab === 'deductions' && platform && <DeductionsPage canEdit />}
           {tab === 'client-deductions' && client && <ClientDeductionsPage client={client} platform={platform} onGo={setTab} />}
           {tab === 'employee-deductions' && client && <EmployeeDeductionsPage client={client} onGo={setTab} />}

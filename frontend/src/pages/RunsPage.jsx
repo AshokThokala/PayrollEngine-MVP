@@ -22,6 +22,10 @@ export default function RunsPage({ client, user }) {
   const [open, setOpen] = useState({})
   const [message, setMessage] = useState(null)
   const [busy, setBusy] = useState(false)
+  const [variable, setVariable] = useState([]) // variable pay codes this client uses (bonus, arrears, ...)
+  useEffect(() => {
+    api.availablePayCodes(client.id).then((l) => setVariable(l.filter((p) => p.kind === 'variable'))).catch(() => setVariable([]))
+  }, [client.id])
 
   const load = useCallback(async () => {
     try {
@@ -76,6 +80,8 @@ export default function RunsPage({ client, user }) {
       const entry = {}
       if (v.paid_days !== undefined && v.paid_days !== '') entry.paid_days = Number(v.paid_days)
       if (v.overtime) entry.overtime = Number(v.overtime)
+      const extra = Object.fromEntries(variable.filter((p) => Number(v[`pay:${p.code}`]) > 0).map((p) => [p.code, Number(v[`pay:${p.code}`])]))
+      if (Object.keys(extra).length) entry.other_earnings = extra
       if (Object.keys(entry).length) body.inputs[code] = entry
     })
     const run = await act(() => api.createRun(client.id, body), `Draft for ${month} calculated.`)
@@ -109,6 +115,31 @@ export default function RunsPage({ client, user }) {
                   ))}
                 </tbody>
               </table>
+            </details>
+          )}
+          {employees.length > 0 && (
+            <details>
+              <summary>Variable pay this month (optional)</summary>
+              {variable.length === 0 ? (
+                <p className="muted small">No variable pay codes in use. Switch on bonus, incentive or arrears under Client pay codes.</p>
+              ) : (
+                <div className="table-wrap">
+                  <table className="compact">
+                    <thead><tr><th>Employee</th>{variable.map((p) => <th key={p.code}>{p.payslip_label || p.name} ₹</th>)}</tr></thead>
+                    <tbody>
+                      {employees.map((emp) => (
+                        <tr key={emp.code}>
+                          <td>{emp.code} · {emp.name}</td>
+                          {variable.map((p) => (
+                            <td key={p.code}><input type="number" min="0" step="1" value={inputs[emp.code]?.[`pay:${p.code}`] ?? ''}
+                              onChange={(e) => setInput(emp.code, `pay:${p.code}`, e.target.value)} aria-label={`${p.name} for ${emp.name}`} /></td>
+                          ))}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </details>
           )}
           <button className="primary" disabled={busy || employees.length === 0}>

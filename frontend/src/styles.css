@@ -456,3 +456,9 @@ button.link.danger { color: var(--error); }
 .switch.on { background: var(--brand); }
 .switch.on span { transform: translateX(18px); }
 .switch:focus-visible { outline: 3px solid var(--brand-ring); }
+
+/* --- pay codes -------------------------------------------------------------------------------- */
+.tag.tiny { font-size: 0.66rem; padding: 1px 6px; margin-left: 6px; vertical-align: middle; }
+.grid.wide-left { grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr); }
+@media (max-width: 1000px) { .grid.wide-left { grid-template-columns: 1fr; } }
+table.pay-grid th, table.pay-grid td { white-space: nowrap; }

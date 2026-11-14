@@ -71,6 +71,10 @@ FIELD_LABELS = {
     "note": "Note",
     # deductions
     "type_code": "Code",
+    "kind": "Pay type",
+    "tax": "Tax treatment",
+    "core": "On for every client",
+    "active": "Active",
     "enabled": "Used by this client",
     "category": "Type",
     "calc": "Calculated as",

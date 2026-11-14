@@ -326,3 +326,22 @@ def test_deductions_api(client, ops):
     assert next(r for r in rows if r["code"] == "loan_emi")["employees"] == 1
     assert client.get("/clients/acme/employee-deductions", headers=ops).json()[0]["employee_name"] == "Ravi"
     assert client.delete(f"/clients/acme/employees/E1/deductions/{d.json()['id']}", headers=ops).json() == {"ok": True}
+
+
+def test_pay_codes_api(client, ops):
+    client.post("/clients", headers=ops, json={"id": "acme", "legal_name": "Acme", "state": "TG"})
+    client.post("/clients/acme/employees", headers=ops, json={
+        "code": "E1", "name": "Ravi", "joined_on": "2026-04-01", "components": {"basic": 30000}})
+    master = client.get("/pay-codes", headers=ops).json()
+    basic = next(p for p in master["codes"] if p["code"] == "basic")
+    assert basic["in_wages"] and basic["core"]
+    r = client.post("/clients/acme/employees", headers=ops, json={
+        "code": "E2", "name": "Priya", "joined_on": "2026-04-01", "components": {"basic": 30000, "lta": 2000}})
+    assert r.status_code == 409 and "Client pay codes" in r.json()["detail"]
+    assert client.put("/clients/acme/pay-codes/lta", headers=ops, json={"enabled": True}).status_code == 200
+    assert client.put("/clients/acme/employees/E1/pay", headers=ops,
+                      json={"components": {"basic": "30000", "lta": "2000"}}).status_code == 200
+    grid = client.get("/clients/acme/employee-pay", headers=ops).json()
+    assert grid["employees"][0]["components"]["lta"] == 2000
+    rows = client.get("/clients/acme/pay-codes", headers=ops).json()
+    assert next(r for r in rows if r["code"] == "lta")["employees"] == 1
