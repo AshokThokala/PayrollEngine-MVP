@@ -82,25 +82,52 @@ export default function App() {
   return <AdminShell user={session.user} onLogout={logout} onViewAs={viewAs} />
 }
 
-const NAV = [
-  { id: 'clients', label: 'Clients', icon: '▦', platformOnly: true },
-  { id: 'onboarding', label: 'Client onboarding', icon: '✓', needsClient: true },
-  { id: 'employees', label: 'Employees', icon: '☺', needsClient: true },
-  { id: 'employee-onboarding', label: 'Employee onboarding', icon: '✉', needsClient: true },
-  { id: 'client-paycodes', label: 'Client pay codes', icon: '⊞', needsClient: true },
-  { id: 'employee-pay', label: 'Employee pay', icon: '⊕', needsClient: true },
-  { id: 'client-deductions', label: 'Client deductions', icon: '⊟', needsClient: true },
-  { id: 'employee-deductions', label: 'Employee deductions', icon: '⊖', needsClient: true },
-  { id: 'time', label: 'Time entry', icon: '◴', needsClient: true },
-  { id: 'runs', label: 'Payroll runs', icon: '₹', needsClient: true },
-  { id: 'filings', label: 'Compliance calendar', icon: '◷' },
-  { id: 'reports', label: 'Reports', icon: '▤', needsClient: true },
-  { id: 'users', label: 'Users and access', icon: '⚿' },
-  { id: 'billing', label: 'Billing', icon: '◫', needsClient: true },
-  { id: 'rules', label: 'Compliance rules', icon: '§', platformOnly: true },
-  { id: 'tax', label: 'Tax rules', icon: '%' },
-  { id: 'paycodes', label: 'Pay code master', icon: '+', platformOnly: true },
-  { id: 'deductions', label: 'Deduction master', icon: '−', platformOnly: true },
+// Pages (each has an id used for navigation), grouped into menu items by what they're for.
+// A menu item with several pages shows them as tabs at the top of the page.
+const PAGES = {
+  clients: { label: 'Clients', platformOnly: true },
+  onboarding: { label: 'Client', needsClient: true },
+  'employee-onboarding': { label: 'Employees', needsClient: true },
+  billing: { label: 'Billing', needsClient: true },
+  employees: { label: 'Employees', needsClient: true },
+  'employee-pay': { label: 'Employee pay', needsClient: true },
+  'client-paycodes': { label: 'Client pay codes', needsClient: true },
+  paycodes: { label: 'Master list', platformOnly: true },
+  'employee-deductions': { label: 'Employee deductions', needsClient: true },
+  'client-deductions': { label: 'Client deductions', needsClient: true },
+  deductions: { label: 'Master list', platformOnly: true },
+  time: { label: 'Time entry', needsClient: true },
+  runs: { label: 'Payroll runs', needsClient: true },
+  reports: { label: 'Reports', needsClient: true },
+  filings: { label: 'Compliance calendar' },
+  tax: { label: 'Tax rules' },
+  rules: { label: 'Compliance rules', platformOnly: true },
+  users: { label: 'Users and access' },
+}
+
+const MENU = [
+  { group: 'Clients', items: [
+    { id: 'm-clients', label: 'Clients', icon: '▦', pages: ['clients'] },
+    { id: 'm-onboarding', label: 'Onboarding', icon: '✓', pages: ['onboarding', 'employee-onboarding'] },
+    { id: 'm-billing', label: 'Billing', icon: '◫', pages: ['billing'] },
+  ] },
+  { group: 'People', items: [
+    { id: 'm-employees', label: 'Employees', icon: '☺', pages: ['employees'] },
+    { id: 'm-pay', label: 'Pay codes', icon: '⊕', pages: ['employee-pay', 'client-paycodes', 'paycodes'] },
+    { id: 'm-deductions', label: 'Deductions', icon: '⊖', pages: ['employee-deductions', 'client-deductions', 'deductions'] },
+  ] },
+  { group: 'Payroll', items: [
+    { id: 'm-time', label: 'Time entry', icon: '◴', pages: ['time'] },
+    { id: 'm-runs', label: 'Payroll runs', icon: '₹', pages: ['runs'] },
+    { id: 'm-reports', label: 'Reports', icon: '▤', pages: ['reports'] },
+  ] },
+  { group: 'Compliance', items: [
+    { id: 'm-calendar', label: 'Compliance calendar', icon: '◷', pages: ['filings'] },
+    { id: 'm-rules', label: 'Tax and rules', icon: '§', pages: ['tax', 'rules'] },
+  ] },
+  { group: 'Settings', items: [
+    { id: 'm-users', label: 'Users and access', icon: '⚿', pages: ['users'] },
+  ] },
 ]
 
 function AdminShell({ user, onLogout, onViewAs }) {
@@ -128,7 +155,16 @@ function AdminShell({ user, onLogout, onViewAs }) {
   }, [loadClients])
 
   const client = clients.find((c) => c.id === clientId)
-  const nav = NAV.filter((n) => platform || !n.platformOnly)
+  const visible = (id) => platform || !PAGES[id].platformOnly
+  const menu = MENU.map((g) => ({ ...g, items: g.items.map((i) => ({ ...i, pages: i.pages.filter(visible) })).filter((i) => i.pages.length) }))
+    .filter((g) => g.items.length)
+  const nav = Object.keys(PAGES).filter(visible).map((id) => ({ id, ...PAGES[id] })) // pages the user can open
+  const current = menu.flatMap((g) => g.items).find((i) => i.pages.includes(tab))
+  const [lastTab, setLastTab] = useState({}) // remembers the last tab opened in each menu item
+  useEffect(() => {
+    if (current) setLastTab((m) => (m[current.id] === tab ? m : { ...m, [current.id]: tab }))
+  }, [tab, current])
+  const disabled = (id) => PAGES[id].needsClient && !clientId
 
   return (
     <div className="shell">
@@ -141,17 +177,25 @@ function AdminShell({ user, onLogout, onViewAs }) {
           </span>
         </div>
         <nav className="side-nav" aria-label="Main">
-          {nav.map((n) => (
-            <button
-              key={n.id}
-              className={tab === n.id ? 'nav-item active' : 'nav-item'}
-              disabled={n.needsClient && !clientId}
-              aria-current={tab === n.id ? 'page' : undefined}
-              onClick={() => setTab(n.id)}
-            >
-              <span className="nav-icon" aria-hidden="true">{n.icon}</span>
-              <span>{n.label}</span>
-            </button>
+          {menu.map((g) => (
+            <div key={g.group} className="nav-group" role="group" aria-label={g.group}>
+              <span className="nav-group-label">{g.group}</span>
+              {g.items.map((item) => {
+                const target = lastTab[item.id] && item.pages.includes(lastTab[item.id]) ? lastTab[item.id] : item.pages.find((id) => !disabled(id)) || item.pages[0]
+                return (
+                  <button
+                    key={item.id}
+                    className={current?.id === item.id ? 'nav-item active' : 'nav-item'}
+                    disabled={item.pages.every(disabled)}
+                    aria-current={current?.id === item.id ? 'page' : undefined}
+                    onClick={() => setTab(target)}
+                  >
+                    <span className="nav-icon" aria-hidden="true">{item.icon}</span>
+                    <span>{item.label}</span>
+                  </button>
+                )
+              })}
+            </div>
           ))}
         </nav>
         <div className="side-footer">
@@ -169,7 +213,7 @@ function AdminShell({ user, onLogout, onViewAs }) {
 
       <div className="main-col">
         <header className="topbar">
-          <h1 className="page-title">{nav.find((n) => n.id === tab)?.label}</h1>
+          <h1 className="page-title">{current?.label || PAGES[tab]?.label}</h1>
           <GlobalSearch
             platform={platform}
             onPickEmployee={(cid, code) => {
@@ -188,6 +232,16 @@ function AdminShell({ user, onLogout, onViewAs }) {
         {error && <div className="banner error">{error}</div>}
 
         <main>
+          {current && current.pages.length > 1 && (
+            <div className="page-tabs" role="tablist" aria-label={current.label}>
+              {current.pages.map((id) => (
+                <button key={id} role="tab" aria-selected={tab === id} className={tab === id ? 'active' : ''}
+                  disabled={disabled(id)} onClick={() => setTab(id)}>
+                  {PAGES[id].label}
+                </button>
+              ))}
+            </div>
+          )}
           {tab === 'clients' && platform && (
             <ClientsPage
               clients={clients}

@@ -38,6 +38,18 @@ The admin who processed a payroll run can approve it. Set `REQUIRE_SEPARATE_APPR
 admin (maker-checker).
 
 ### Working in the app
+The menu is grouped by what you're doing; items with several pages show them as tabs at the top:
+
+| Group | Menu item | Tabs |
+|---|---|---|
+| Clients | Clients · Onboarding · Billing | Onboarding: *Client*, *Employees* |
+| People | Employees · Pay codes · Deductions | Pay codes: *Employee pay*, *Client pay codes*, *Master list*; Deductions: *Employee deductions*, *Client deductions*, *Master list* |
+| Payroll | Time entry · Payroll runs · Reports | |
+| Compliance | Compliance calendar · Tax and rules | Tax and rules: *Tax rules*, *Compliance rules* |
+| Settings | Users and access | |
+
+Master lists, Clients and Compliance rules are for the ClearPay4U team only. Each menu item reopens the tab you used last.
+
 - **Time entry** (salaried and hourly): pick a month, click an employee and fill in a calendar.
   - *Salaried*: a status per day - present, absent (A), half day (HD), paid leave (L), holiday (H), weekly off (WO) -
     and overtime hours. Absent days and half of each half day are loss of pay; no time sheet = full month paid.

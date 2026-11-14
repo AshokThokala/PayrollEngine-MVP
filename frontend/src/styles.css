@@ -481,3 +481,22 @@ table.pay-grid th, table.pay-grid td { white-space: nowrap; }
 /* --- dialogs -------------------------------------------------------------------------------- */
 .modal-backdrop { position: fixed; inset: 0; z-index: 60; background: rgba(10, 31, 44, 0.45); display: grid; place-items: center; padding: 16px; }
 .modal { width: min(440px, 100%); max-height: calc(100vh - 32px); overflow-y: auto; }
+
+/* --- grouped menu and page tabs -------------------------------------------------------------- */
+.side-nav { overflow-y: auto; gap: 14px; scrollbar-width: thin; }
+.nav-group { display: flex; flex-direction: column; gap: 2px; }
+.nav-group-label { padding: 0 12px 4px; font-size: 0.68rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase;
+  color: var(--navy-text); opacity: 0.6; }
+.nav-group .nav-item { padding: 8px 12px; }
+.page-tabs { display: flex; gap: 4px; margin: 0 0 18px; border-bottom: 1px solid var(--line); overflow-x: auto; scrollbar-width: none; }
+.page-tabs::-webkit-scrollbar { display: none; }
+.page-tabs button { border: 0; background: transparent; padding: 10px 14px; border-bottom: 3px solid transparent; border-radius: 0;
+  color: var(--muted); font-weight: 600; white-space: nowrap; cursor: pointer; margin-bottom: -1px; }
+.page-tabs button:hover:not(:disabled) { color: var(--ink); }
+.page-tabs button.active { color: var(--brand); border-bottom-color: var(--brand); }
+.page-tabs button:disabled { opacity: 0.4; cursor: not-allowed; }
+@media (max-width: 900px) {
+  .side-nav { flex-direction: row; gap: 6px; overflow-y: visible; }
+  .nav-group { flex-direction: row; gap: 6px; }
+  .nav-group-label { display: none; }
+}
