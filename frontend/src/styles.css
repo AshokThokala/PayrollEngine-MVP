@@ -598,3 +598,9 @@ dl.details-grid .fact dd { margin: 2px 0 0; }
 .row.filters input[type='search'] { flex: 1; min-width: 200px; }
 @media (max-width: 1000px) { .grid.client-grid { grid-template-columns: 1fr; } }
 @media (max-width: 640px) { .search-bar { flex-direction: column; align-items: stretch; } }
+
+/* search boxes in cards must not clip their suggestion list */
+.card.search-bar { overflow: visible; position: relative; z-index: 5; }
+.topbar-spacer { flex: 1; }
+mark { background: var(--saffron-soft); color: inherit; padding: 0 1px; border-radius: 3px; font-weight: 700; }
+.row.filters .picker { flex: 1; min-width: 240px; }

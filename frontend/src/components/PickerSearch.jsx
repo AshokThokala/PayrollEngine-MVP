@@ -1,6 +1,15 @@
 import { useEffect, useRef, useState } from 'react'
 
-// A search box with a drop-down of matches. Arrow keys + Enter, or click, to pick one.
+// Marks the part of `text` that matches the search, e.g. "Acme <mark>Tex</mark>tiles".
+export function Highlight({ text, q }) {
+  const s = String(text ?? '')
+  const i = q ? s.toLowerCase().indexOf(q) : -1
+  if (i < 0) return s
+  return <>{s.slice(0, i)}<mark>{s.slice(i, i + q.length)}</mark>{s.slice(i + q.length)}</>
+}
+
+// A search box that suggests matches as you type. Arrow keys + Enter, or click, to pick one.
+// `render(item, q)` draws one suggestion; use <Highlight text=... q={q} /> to mark the match.
 export default function PickerSearch({ items, match, render, onPick, placeholder, label, limit = 8, autoFocus }) {
   const [q, setQ] = useState('')
   const [open, setOpen] = useState(false)
@@ -14,8 +23,9 @@ export default function PickerSearch({ items, match, render, onPick, placeholder
   }, [])
 
   const text = q.trim().toLowerCase()
-  const results = (text ? items.filter((it) => match(it, text)) : items).slice(0, limit)
-  const more = (text ? items.filter((it) => match(it, text)).length : items.length) - results.length
+  const all = text ? items.filter((it) => match(it, text)) : []
+  const results = all.slice(0, limit)
+  const more = all.length - results.length
 
   const pick = (it) => {
     onPick(it)
@@ -39,12 +49,14 @@ export default function PickerSearch({ items, match, render, onPick, placeholder
         onFocus={() => setOpen(true)} onKeyDown={onKey} />
       {open && (
         <div className="gs-menu" role="listbox">
-          {results.length === 0 ? <p className="muted small gs-empty">{items.length ? 'No matches.' : 'Nothing here yet.'}</p> : (
+          {!text ? (
+            <p className="muted small gs-empty">{items.length ? `Start typing to see suggestions (${items.length} to search).` : 'Nothing here yet.'}</p>
+          ) : results.length === 0 ? <p className="muted small gs-empty">No matches for “{q.trim()}”.</p> : (
             <ul>
               {results.map((it, i) => (
                 <li key={i} role="option" aria-selected={i === active} className={i === active ? 'active' : undefined}
                     onMouseEnter={() => setActive(i)} onMouseDown={(e) => { e.preventDefault(); pick(it) }}>
-                  {render(it)}
+                  {render(it, text)}
                 </li>
               ))}
             </ul>

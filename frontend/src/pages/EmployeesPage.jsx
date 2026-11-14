@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import EmployeeDeductions from '../components/EmployeeDeductions.jsx'
 import PickerSearch from '../components/PickerSearch.jsx'
+import { EmployeeSuggestion, matchEmployee } from '../components/ClientEmployees.jsx'
 import EmployeeDetails, { ageFrom } from '../components/EmployeeDetails.jsx'
 import { api, money, today } from '../api.js'
 import InfoTip from '../components/InfoTip.jsx'
@@ -299,13 +300,8 @@ export default function EmployeesPage({ client, onViewAs, openRequest }) {
       <section className="card search-bar">
         <PickerSearch
           items={employees}
-          match={(e, q) => e.name.toLowerCase().includes(q) || e.code.toLowerCase().includes(q)
-            || (e.designation || '').toLowerCase().includes(q) || (e.department || '').toLowerCase().includes(q)}
-          render={(e) => (
-            <><span className="gs-icon" aria-hidden="true">☺</span>
-              <span className="gs-text"><strong>{e.name}</strong>
-                <span className="muted small">{e.code}{e.designation ? ` · ${e.designation}` : ''}{e.exited_on ? ' · left' : ''}</span></span></>
-          )}
+          match={matchEmployee}
+          render={(e, q) => <EmployeeSuggestion e={e} q={q} />}
           onPick={select}
           placeholder={`Search ${employees.filter((e) => !e.exited_on).length} employees of ${client.legal_name} by name, code or designation`}
           label="Search employees"

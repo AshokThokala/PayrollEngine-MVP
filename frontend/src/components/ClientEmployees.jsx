@@ -1,10 +1,24 @@
 import { useEffect, useState } from 'react'
 import { api, money } from '../api.js'
+import PickerSearch, { Highlight } from './PickerSearch.jsx'
+
+export const matchEmployee = (e, q) => e.name.toLowerCase().includes(q) || e.code.toLowerCase().includes(q)
+  || (e.designation || '').toLowerCase().includes(q) || (e.department || '').toLowerCase().includes(q)
+
+export function EmployeeSuggestion({ e, q }) {
+  return (
+    <><span className="gs-icon" aria-hidden="true">☺</span>
+      <span className="gs-text"><strong><Highlight text={e.name} q={q} /></strong>
+        <span className="muted small"><Highlight text={e.code} q={q} />
+          {e.designation ? <> · <Highlight text={e.designation} q={q} /></> : null}
+          {e.department ? <> · <Highlight text={e.department} q={q} /></> : null}
+          {e.exited_on ? ' · left' : ''}</span></span></>
+  )
+}
 
 // All employees of one client, shown when the client is opened. Click one to open their record.
 export default function ClientEmployees({ client, onOpenEmployee, onAddEmployee }) {
   const [list, setList] = useState(null)
-  const [filter, setFilter] = useState('')
   const [showLeft, setShowLeft] = useState(false)
   const [error, setError] = useState('')
 
@@ -17,14 +31,12 @@ export default function ClientEmployees({ client, onOpenEmployee, onAddEmployee 
   if (error) return <section className="card"><div className="banner error">{error}</div></section>
   if (!list) return <section className="card"><p className="muted">Loading employees…</p></section>
 
-  const q = filter.trim().toLowerCase()
   const active = list.filter((e) => !e.exited_on)
-  const shown = list.filter((e) => (showLeft || !e.exited_on)
-    && (!q || e.name.toLowerCase().includes(q) || e.code.toLowerCase().includes(q) || (e.designation || '').toLowerCase().includes(q)))
+  const shown = list.filter((e) => showLeft || !e.exited_on)
   const payroll = active.reduce((t, e) => t + Number(e.monthly_total || 0), 0)
 
   return (
-    <section className="card">
+    <section className="card allow-overflow">
       <div className="run-head">
         <h2>Employees <span className="tag">{active.length} active</span></h2>
         <button onClick={onAddEmployee}>+ Add employee</button>
@@ -39,8 +51,10 @@ export default function ClientEmployees({ client, onOpenEmployee, onAddEmployee 
       ) : (
         <>
           <div className="row filters">
-            <input type="search" placeholder="Filter by name, code or designation" value={filter}
-              onChange={(e) => setFilter(e.target.value)} aria-label="Filter employees" />
+            <PickerSearch items={list} match={matchEmployee} render={(e, q2) => <EmployeeSuggestion e={e} q={q2} />}
+              onPick={(e) => onOpenEmployee(client.id, e.code)}
+              placeholder={`Search ${client.legal_name}'s employees by name, code, designation or department`}
+              label={`Search ${client.legal_name} employees`} />
             <label className="check"><input type="checkbox" checked={showLeft} onChange={(e) => setShowLeft(e.target.checked)} /> Show employees who left</label>
           </div>
           <div className="table-wrap">
@@ -59,7 +73,7 @@ export default function ClientEmployees({ client, onOpenEmployee, onAddEmployee 
               </tbody>
             </table>
           </div>
-          {shown.length === 0 && <p className="muted small">No employees match.</p>}
+          {shown.length === 0 && <p className="muted small">Everyone here has left; tick "Show employees who left".</p>}
         </>
       )}
     </section>

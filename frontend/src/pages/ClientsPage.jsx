@@ -1,7 +1,7 @@
 import { cloneElement, useEffect, useState } from 'react'
 import ClientEmployees from '../components/ClientEmployees.jsx'
 import ClientLocations from '../components/ClientLocations.jsx'
-import PickerSearch from '../components/PickerSearch.jsx'
+import PickerSearch, { Highlight } from '../components/PickerSearch.jsx'
 import { api } from '../api.js'
 import InfoTip from '../components/InfoTip.jsx'
 
@@ -108,9 +108,10 @@ export default function ClientsPage({ clients, onCreated, onOpen, onUpdated, onO
         <PickerSearch
           items={clients}
           match={(c, q) => c.legal_name.toLowerCase().includes(q) || c.id.includes(q) || (c.pan || '').toLowerCase().includes(q)}
-          render={(c) => (
+          render={(c, q) => (
             <><span className="gs-icon" aria-hidden="true">▦</span>
-              <span className="gs-text"><strong>{c.legal_name}</strong><span className="muted small">{c.id} · {c.state}</span></span></>
+              <span className="gs-text"><strong><Highlight text={c.legal_name} q={q} /></strong>
+                <span className="muted small"><Highlight text={c.id} q={q} /> · {c.state}{c.pan ? <> · PAN <Highlight text={c.pan} q={q} /></> : null}</span></span></>
           )}
           onPick={select}
           placeholder={`Search ${clients.length} client${clients.length === 1 ? '' : 's'} by name, ID or PAN`}
