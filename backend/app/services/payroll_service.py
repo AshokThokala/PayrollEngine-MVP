@@ -118,14 +118,16 @@ class PayrollService:
         return out
 
     @staticmethod
-    def _deductions_for(record, standing, paid, days, mi):
+    def _deductions_for(record, standing, paid, days, mi, structure=None):
         """This month's other deductions: standing ones, then one-off amounts entered for the run
-        (a one-off with the same code replaces the standing amount)."""
+        (a one-off with the same code replaces the standing amount). `structure` is the month's pay
+        (for hourly staff: hours x rate), so percentage deductions follow what is actually paid."""
         from .deductions import monthly_amount
+        structure = structure or record.structure
         ratio = D(paid) / D(days) if days else D(0)
-        comps = record.structure.components
+        comps = structure.components
         basic_da = (comps.get("basic", D(0)) + comps.get("da", D(0))) * ratio
-        gross = record.structure.total * ratio
+        gross = structure.total * ratio
         others: dict = {}
         labels: dict = {}
         for t, d in standing:
@@ -406,8 +408,12 @@ class PayrollService:
         if unknown:
             raise ServiceError(f"Unknown or inactive employees: {', '.join(sorted(unknown))}", field="inputs")
 
-        for mi in inputs.values():
+        month_days = calendar.monthrange(end.year, end.month)[1]
+        for code, mi in inputs.items():
             self._check_pay(client_id, mi.other_earnings, variable=True)
+            if mi.paid_days is not None and not (D(0) <= D(mi.paid_days) <= D(month_days)):
+                raise ServiceError(f"{code}: paid days must be between 0 and {month_days} for {end:%B %Y}",
+                                   field="inputs")
         pay_labels = self._pay_labels(client_id)
         from .timesheets import overtime_pay, summarize
         sheets = {t.employee_code: t for t in self.repo.list_timesheets(client_id, end.replace(day=1))}
@@ -444,7 +450,7 @@ class PayrollService:
             if sheet is not None and sheet.status.value != "approved":
                 run.flags.append(f"{record.code}: time sheet not approved yet")
             year_to_date = ytd.get(record.code, {})
-            others, labels = self._deductions_for(record, standing.get(record.code, []), paid, days, mi)
+            others, labels = self._deductions_for(record, standing.get(record.code, []), paid, days, mi, structure)
             slip = compute_payslip(
                 record.employee, structure,
                 PayInputs(period=end, days_in_month=days, paid_days=paid,
@@ -472,6 +478,19 @@ class PayrollService:
         run.status, run.approved_by = RunStatus.APPROVED, user
         self.repo.save_run(run)
         self._audit(user, "run.approve", run_id, "approved by the preparer" if self_approved else "")
+        return run
+
+    def reopen(self, run_id: str, user: str, reason: str = "") -> PayrollRun:
+        """Send an approved (not yet locked) run back to draft, e.g. to fix time or salary and recalculate."""
+        run = self.repo.get_run(run_id)
+        if run.status != RunStatus.APPROVED:
+            raise ServiceError(f"Only an approved run can be reopened (run is {run.status.value}); "
+                               "locked runs are final - correct them in the next month")
+        if not reason.strip():
+            raise ServiceError("Say why the run is being reopened", field="reason")
+        run.status, run.approved_by = RunStatus.DRAFT, None
+        self.repo.save_run(run)
+        self._audit(user, "run.reopen", run_id, reason.strip())
         return run
 
     def lock(self, run_id: str, user: str) -> list[Filing]:

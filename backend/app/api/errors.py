@@ -71,6 +71,9 @@ FIELD_LABELS = {
     "note": "Note",
     # deductions
     "type_code": "Code",
+    "current_password": "Current password",
+    "new_password": "New password",
+    "reason": "Reason",
     "pay_type": "Pay type",
     "hourly_rate": "Hourly rate",
     "days": "Days",

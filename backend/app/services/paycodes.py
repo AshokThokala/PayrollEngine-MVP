@@ -30,12 +30,17 @@ def seed_pay_codes(repo) -> int:
     for raw in json.loads(SEED_FILE.read_text())["codes"]:
         if repo.get_pay_code(raw["code"]):
             continue
-        repo.save_pay_code(PayCode(
-            code=raw["code"], name=raw["name"], kind=PayCodeKind(raw["kind"]), tax=PayCodeTax(raw.get("tax", "taxable")),
-            calc=raw.get("calc", "fixed"),
-            default_value=None if raw.get("default_value") is None else D(raw["default_value"]),
-            payslip_label=raw.get("payslip_label", ""), tax_section=raw.get("tax_section", ""),
-            description=raw.get("description", ""), core=bool(raw.get("core")), system=True))
+        try:
+            repo.save_pay_code(PayCode(
+                code=raw["code"], name=raw["name"], kind=PayCodeKind(raw["kind"]), tax=PayCodeTax(raw.get("tax", "taxable")),
+                calc=raw.get("calc", "fixed"),
+                default_value=None if raw.get("default_value") is None else D(raw["default_value"]),
+                payslip_label=raw.get("payslip_label", ""), tax_section=raw.get("tax_section", ""),
+                description=raw.get("description", ""), core=bool(raw.get("core")), system=True))
+        except Exception:  # another worker seeded it at the same moment
+            if repo.get_pay_code(raw["code"]) is None:
+                raise
+            continue
         added += 1
     return added
 

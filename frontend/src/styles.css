@@ -477,3 +477,7 @@ table.pay-grid th, table.pay-grid td { white-space: nowrap; }
 .cal-day.st-h, .cal-day.st-wo { background: #f1f3f4; }
 .cal-day.invalid { border-color: var(--error); box-shadow: 0 0 0 2px var(--error-soft); }
 .legend { margin-top: 6px; }
+
+/* --- dialogs -------------------------------------------------------------------------------- */
+.modal-backdrop { position: fixed; inset: 0; z-index: 60; background: rgba(10, 31, 44, 0.45); display: grid; place-items: center; padding: 16px; }
+.modal { width: min(440px, 100%); max-height: calc(100vh - 32px); overflow-y: auto; }

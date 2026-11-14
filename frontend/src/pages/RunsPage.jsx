@@ -183,10 +183,16 @@ export default function RunsPage({ client, user }) {
                   </button>
                 )}
                 {selected.status === 'approved' && (
-                  <button className="primary" disabled={busy}
-                    onClick={() => act(() => api.lockRun(selected.id), (f) => `Run locked. ${f.length} filings added to the compliance calendar.`)}>
-                    Lock run
-                  </button>
+                  <>
+                    <button disabled={busy} onClick={() => {
+                      const reason = window.prompt('Why reopen this run? (e.g. wrong attendance) It goes back to draft so you can recalculate.')
+                      if (reason && reason.trim()) act(() => api.reopenRun(selected.id, reason), 'Run reopened as a draft. Fix the data, then calculate it again.')
+                    }}>Reopen</button>
+                    <button className="primary" disabled={busy}
+                      onClick={() => act(() => api.lockRun(selected.id), (f) => `Run locked. ${f.length} filings added to the compliance calendar.`)}>
+                      Lock run
+                    </button>
+                  </>
                 )}
               </div>
             </div>

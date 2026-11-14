@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { api, loadSession, saveSession, stashAdminSession, stashedAdminSession, whenLoggedOut } from './api.js'
+import ChangePassword from './components/ChangePassword.jsx'
 import ClientSwitcher from './components/ClientSwitcher.jsx'
 import GlobalSearch from './components/GlobalSearch.jsx'
 import AuthScreen from './pages/AuthScreen.jsx'
@@ -161,6 +162,7 @@ function AdminShell({ user, onLogout, onViewAs }) {
               <span className="muted small">{platform ? 'Platform admin' : 'Client admin'}</span>
             </span>
           </div>
+          <ChangePassword />
           <button className="ghost" onClick={onLogout}>Log out</button>
         </div>
       </aside>

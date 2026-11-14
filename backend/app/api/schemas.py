@@ -374,3 +374,16 @@ class TimesheetIn(BaseModel):
 class TimeApproveIn(BaseModel):
     codes: list[str] | None = None
     approve: bool = True
+
+
+class ReopenIn(BaseModel):
+    reason: str = ""
+
+
+class PasswordChangeIn(BaseModel):
+    current_password: str = ""
+    new_password: str = ""
+
+
+class PasswordResetIn(BaseModel):
+    password: str = ""

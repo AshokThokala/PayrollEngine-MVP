@@ -106,6 +106,17 @@ export default function UsersPage({ user, clients }) {
     }
   }
 
+  const resetPassword = async (u) => {
+    const pw = window.prompt(`Temporary password for ${u.name} (at least 8 characters, with a letter and a number):`)
+    if (!pw) return
+    try {
+      await api.resetPassword(u.id, pw)
+      setMessage({ kind: 'ok', text: `Password reset for ${u.name}. Share it privately and ask them to change it after logging in.` })
+    } catch (err) {
+      setMessage({ kind: 'error', text: err.message })
+    }
+  }
+
   const clientName = (id) => (id ? clients.find((c) => c.id === id)?.legal_name || id : 'All clients')
   const pending = users.filter((u) => u.status === 'pending')
   const shown = users.filter((u) => filter === 'all' || u.status === filter)
@@ -173,6 +184,9 @@ export default function UsersPage({ user, clients }) {
                       u.status === 'active'
                         ? <button className="link" onClick={() => act(u, 'disable')}>Disable</button>
                         : <button className="link" onClick={() => act(u, u.status === 'pending' ? 'approve' : 'enable')}>{u.status === 'pending' ? 'Approve' : 'Enable'}</button>
+                    )}
+                    {u.id !== user.id && (u.client_id || user.is_platform_admin) && (
+                      <button className="link" onClick={() => resetPassword(u)}>Reset password</button>
                     )}
                   </td>
                 </tr>

@@ -180,3 +180,24 @@ def test_errors_name_the_field(repo):
     with pytest.raises(ServiceError) as early_exit:
         svc.exit_employee("acme", "E1", date(2026, 3, 1), "ops1")
     assert early_exit.value.field == "exit_on"
+
+
+def test_paid_days_cannot_exceed_month_and_reopen(repo):
+    from app.services.payroll_service import MonthInput
+    svc = staffed(repo)
+    with pytest.raises(ServiceError, match="between 0 and 31"):
+        svc.create_draft("acme", date(2026, 10, 1), user="ops1",
+                         inputs={next(iter(r.code for r in repo.list_employees("acme"))): MonthInput(paid_days=Decimal(45))})
+    run = svc.create_draft("acme", date(2026, 10, 1), user="ops1")
+    with pytest.raises(ServiceError):
+        svc.reopen(run.id, "ops1", "fix")  # still a draft
+    svc.approve(run.id, user="ops2")
+    with pytest.raises(ServiceError) as e:
+        svc.reopen(run.id, "ops1", "")
+    assert e.value.field == "reason"
+    assert svc.reopen(run.id, "ops1", "wrong attendance").status.value == "draft"
+    assert repo.get_run(run.id).approved_by is None
+    svc.approve(run.id, user="ops2")
+    svc.lock(run.id, user="ops2")
+    with pytest.raises(ServiceError, match="locked runs are final"):
+        svc.reopen(run.id, "ops1", "late fix")
