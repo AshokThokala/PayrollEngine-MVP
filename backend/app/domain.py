@@ -347,3 +347,31 @@ class ClientPayCode:
     enabled: bool = True
     default_value: Decimal | None = None
     payslip_label: str = ""
+
+
+# --- time entry ---------------------------------------------------------------------------------
+
+DAY_STATUSES = {
+    "P": "Present", "A": "Absent (unpaid)", "HD": "Half day (half unpaid)", "L": "Paid leave",
+    "H": "Holiday", "WO": "Weekly off",
+}
+
+
+class TimesheetStatus(str, enum.Enum):
+    DRAFT = "draft"
+    APPROVED = "approved"
+
+
+@dataclass
+class Timesheet:
+    """One employee's time for one month. `days` maps the day number ("1".."31") to
+    {"status": P/A/HD/L/H/WO, "hours": regular hours, "ot": overtime hours}."""
+
+    client_id: str
+    employee_code: str
+    month: date  # first day of the month
+    days: dict = field(default_factory=dict)
+    status: TimesheetStatus = TimesheetStatus.DRAFT
+    note: str = ""
+    updated_by: str = ""
+    approved_by: str | None = None

@@ -20,6 +20,7 @@ import ReportsPage from './pages/ReportsPage.jsx'
 import FilingsPage from './pages/FilingsPage.jsx'
 import RulesPage from './pages/RulesPage.jsx'
 import TaxRulesPage from './pages/TaxRulesPage.jsx'
+import TimeEntryPage from './pages/TimeEntryPage.jsx'
 import RunsPage from './pages/RunsPage.jsx'
 import UsersPage from './pages/UsersPage.jsx'
 
@@ -89,6 +90,7 @@ const NAV = [
   { id: 'employee-pay', label: 'Employee pay', icon: '⊕', needsClient: true },
   { id: 'client-deductions', label: 'Client deductions', icon: '⊟', needsClient: true },
   { id: 'employee-deductions', label: 'Employee deductions', icon: '⊖', needsClient: true },
+  { id: 'time', label: 'Time entry', icon: '◴', needsClient: true },
   { id: 'runs', label: 'Payroll runs', icon: '₹', needsClient: true },
   { id: 'filings', label: 'Compliance calendar', icon: '◷' },
   { id: 'reports', label: 'Reports', icon: '▤', needsClient: true },
@@ -201,6 +203,7 @@ function AdminShell({ user, onLogout, onViewAs }) {
           {tab === 'employees' && client && (
             <EmployeesPage client={client} openRequest={openEmployee} onViewAs={(code) => onViewAs(client.id, code).catch((e) => setError(e.message))} />
           )}
+          {tab === 'time' && client && <TimeEntryPage client={client} onGo={setTab} />}
           {tab === 'runs' && client && <RunsPage client={client} user={user.email} />}
           {tab === 'filings' && <FilingsPage clientId={clientId} clients={clients} canSeeAll={platform} />}
           {tab === 'reports' && client && <ReportsPage client={client} />}

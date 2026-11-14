@@ -38,6 +38,15 @@ The admin who processed a payroll run can approve it. Set `REQUIRE_SEPARATE_APPR
 admin (maker-checker).
 
 ### Working in the app
+- **Time entry** (salaried and hourly): pick a month, click an employee and fill in a calendar.
+  - *Salaried*: a status per day - present, absent (A), half day (HD), paid leave (L), holiday (H), weekly off (WO) -
+    and overtime hours. Absent days and half of each half day are loss of pay; no time sheet = full month paid.
+  - *Hourly* (Employees → Pay type *Hourly* with an hourly rate): hours and overtime hours per day; pay = hours × rate,
+    all of it wages for PF and ESI.
+  - Overtime is paid at twice the ordinary rate (salaried: basic + DA + retaining allowance ÷ 26 days ÷ 8 hours).
+  - *Mark Mon–Sat present* / *Fill 8 h Mon–Sat* to start; *Save and approve*, or *Approve all* for the month. The
+    payroll run uses the time automatically and flags sheets not yet approved and hourly staff with no hours; once
+    the run is approved the month's time is read-only. Attendance typed on the run screen still overrides it.
 - **Pay codes (earnings), at three levels:**
   - **Pay code master** (ClearPay4U team): every kind of pay - *Salary* pay codes (basic, DA, retaining allowance,
     HRA, special allowance, conveyance, CCA, medical, LTA, children education, meal vouchers, telephone and fuel
@@ -247,6 +256,7 @@ python -m pytest
 | `audit_events` | Append-only audit log (UPDATE/DELETE blocked on Postgres) |
 | `billing_plans` | One billing plan per client: plan, rates, billing email |
 | `invoices` | Monthly invoices: lines (JSON), GST split, number, status, payment reference |
+| `timesheets` | Monthly time per employee: day statuses, hours and overtime (JSON), draft/approved |
 | `pay_codes` | Master list of pay codes: salary or variable, tax treatment, default, payslip name |
 | `client_pay_codes` | Pay codes each client uses, with its default and payslip name |
 | `deduction_types` | Master list of deductions (statutory, voluntary, recovery), calculation, cap, tax section |

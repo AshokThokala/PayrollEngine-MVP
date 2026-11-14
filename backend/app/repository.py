@@ -9,7 +9,7 @@ from datetime import date
 from decimal import Decimal
 from typing import Protocol
 
-from .domain import (AuditEvent, BillingPlan, Client, ClientDeduction, ClientPayCode, PayCode, DeductionType, EmployeeDeduction, EmployeeProfile, EmployeeRecord, Filing, Invite, Invoice,
+from .domain import (AuditEvent, BillingPlan, Client, ClientDeduction, ClientPayCode, PayCode, Timesheet, DeductionType, EmployeeDeduction, EmployeeProfile, EmployeeRecord, Filing, Invite, Invoice,
                      PayrollRun, RunStatus, RunSummary, StatutoryRule, User)
 from .engine.models import Payslip
 
@@ -64,6 +64,8 @@ class Repository(Protocol):
     def list_deduction_types(self) -> list[DeductionType]: ...
     def get_deduction_type(self, code: str) -> DeductionType | None: ...
     def save_deduction_type(self, t: DeductionType) -> None: ...
+    def list_timesheets(self, client_id: str, month) -> list[Timesheet]: ...
+    def save_timesheet(self, t: Timesheet) -> None: ...
     def list_pay_codes(self) -> list[PayCode]: ...
     def get_pay_code(self, code: str) -> PayCode | None: ...
     def save_pay_code(self, p: PayCode) -> None: ...
@@ -94,6 +96,7 @@ class InMemoryRepository:
         self._employee_deductions: dict[str, EmployeeDeduction] = {}
         self._client_deductions: dict[tuple[str, str], ClientDeduction] = {}
         self._pay_codes: dict[str, PayCode] = {}
+        self._timesheets: dict[tuple, Timesheet] = {}
         self._client_pay_codes: dict[tuple[str, str], ClientPayCode] = {}
         self._profiles: dict[tuple[str, str], EmployeeProfile] = {}
         self._plans: dict[str, BillingPlan] = {}
@@ -214,6 +217,14 @@ class InMemoryRepository:
 
     def save_deduction_type(self, t: DeductionType) -> None:
         self._deduction_types[t.code] = t
+
+    def list_timesheets(self, client_id: str, month) -> list[Timesheet]:
+        return [t for (cid, _, m), t in sorted(self._timesheets.items(), key=lambda kv: kv[0][1])
+                if cid == client_id and m == month]
+
+    def save_timesheet(self, t: Timesheet) -> None:
+        self.get_client(t.client_id)
+        self._timesheets[(t.client_id, t.employee_code, t.month)] = t
 
     def list_pay_codes(self) -> list[PayCode]:
         return sorted(self._pay_codes.values(), key=lambda p: (p.kind.value, not p.core, p.name.lower()))

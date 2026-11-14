@@ -71,6 +71,9 @@ FIELD_LABELS = {
     "note": "Note",
     # deductions
     "type_code": "Code",
+    "pay_type": "Pay type",
+    "hourly_rate": "Hourly rate",
+    "days": "Days",
     "kind": "Pay type",
     "tax": "Tax treatment",
     "core": "On for every client",

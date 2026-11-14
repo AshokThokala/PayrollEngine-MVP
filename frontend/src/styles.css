@@ -462,3 +462,18 @@ button.link.danger { color: var(--error); }
 .grid.wide-left { grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr); }
 @media (max-width: 1000px) { .grid.wide-left { grid-template-columns: 1fr; } }
 table.pay-grid th, table.pay-grid td { white-space: nowrap; }
+
+/* --- time entry -------------------------------------------------------------------------------- */
+.cal-head, .cal { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; }
+.cal-head span { font-size: 0.7rem; font-weight: 600; color: var(--muted); text-align: center; }
+.cal-day { border: 1px solid var(--line); border-radius: 8px; padding: 4px; background: #fff; display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.cal-day .cal-num { font-size: 0.7rem; font-weight: 700; color: var(--muted); }
+.cal-day select, .cal-day input { width: 100%; min-width: 0; padding: 3px 4px; font-size: 0.78rem; border-radius: 5px; }
+.cal-day input.ot { background: #fffaf0; }
+.cal-day.st-p { background: var(--ok-soft); }
+.cal-day.st-a { background: var(--error-soft); }
+.cal-day.st-hd { background: var(--warn-soft); }
+.cal-day.st-l { background: #e8f0fb; }
+.cal-day.st-h, .cal-day.st-wo { background: #f1f3f4; }
+.cal-day.invalid { border-color: var(--error); box-shadow: 0 0 0 2px var(--error-soft); }
+.legend { margin-top: 6px; }
