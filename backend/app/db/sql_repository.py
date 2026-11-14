@@ -11,7 +11,7 @@ from datetime import date, datetime
 from decimal import Decimal
 from typing import Any, Iterator
 
-from ..domain import (AuditEvent, BillingPlan, Client, ClientDeduction, ClientPayCode, Timesheet, TimesheetStatus, PayCode, PayCodeKind,
+from ..domain import (AuditEvent, BillingPlan, Client, ClientDeduction, ClientLocation, ClientPayCode, Timesheet, TimesheetStatus, PayCode, PayCodeKind,
                       PayCodeTax, DeductionCalc, DeductionCategory, DeductionType,
                       EmployeeDeduction, EmployeeProfile, EmployeeRecord, Filing, FilingStatus,
                       Invite, Invoice, InvoiceStatus, PayrollRun, ProfileStatus, Role, RunStatus, RunSummary, StatutoryRule, User,
@@ -114,19 +114,19 @@ class SqlRepository:
             values = (e.name, e.state, *(getattr(e, f) for f in EMPLOYEE_FLAGS),
                       e.tax_regime, record.joined_on, record.exited_on, e.tax_age_group,
                       e.metro_city, e.parents_senior, json.dumps(e.tax_declarations, default=str),
-                      e.pay_type, e.hourly_rate)
+                      e.pay_type, e.hourly_rate, e.location_id)
             if exists:
                 c.run("UPDATE employees SET name = ?, state = ?, pf_member = ?, eps_member = ?,"
                       " pf_on_full_wages = ?, esi_covered = ?, pt_applicable = ?,"
                       " lwf_applicable = ?, tax_regime = ?, joined_on = ?, exited_on = ?,"
                       " tax_age_group = ?, metro_city = ?, parents_senior = ?, tax_declarations = ?,"
-                      " pay_type = ?, hourly_rate = ? WHERE client_id = ? AND code = ?", *values, record.client_id, e.code)
+                      " pay_type = ?, hourly_rate = ?, location_id = ? WHERE client_id = ? AND code = ?", *values, record.client_id, e.code)
             else:
                 c.run("INSERT INTO employees (name, state, pf_member, eps_member,"
                       " pf_on_full_wages, esi_covered, pt_applicable, lwf_applicable,"
                       " tax_regime, joined_on, exited_on, tax_age_group, metro_city, parents_senior,"
-                      " tax_declarations, pay_type, hourly_rate, client_id, code)"
-                      " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                      " tax_declarations, pay_type, hourly_rate, location_id, client_id, code)"
+                      " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                       *values, record.client_id, e.code)
             version, current = self._salary(c, record.client_id, e.code)
             if current != record.structure.components:
@@ -147,7 +147,7 @@ class SqlRepository:
 
     def _employee_from_row(self, c: "_Cursor", row) -> EmployeeRecord:
         (client_id, code, name, state, *flags, regime, joined, exited,
-         age_group, metro, parents_senior, declarations, pay_type, hourly_rate) = row
+         age_group, metro, parents_senior, declarations, pay_type, hourly_rate, location_id) = row
         flag_values = dict(zip(EMPLOYEE_FLAGS, map(_bool, flags)))
         _, components = self._salary(c, client_id, code)
         return EmployeeRecord(
@@ -156,13 +156,13 @@ class SqlRepository:
                      tax_age_group=age_group, metro_city=bool(metro),
                      parents_senior=bool(parents_senior),
                      tax_declarations=json.loads(declarations or "{}"),
-                     pay_type=pay_type or "salaried", hourly_rate=_dec(hourly_rate or 0)),
+                     pay_type=pay_type or "salaried", hourly_rate=_dec(hourly_rate or 0), location_id=location_id),
             SalaryStructure(components), _date(joined), _date(exited),
         )
 
     _EMP_COLS = ("client_id, code, name, state, pf_member, eps_member, pf_on_full_wages,"
                  " esi_covered, pt_applicable, lwf_applicable, tax_regime, joined_on, exited_on,"
-                 " tax_age_group, metro_city, parents_senior, tax_declarations, pay_type, hourly_rate")
+                 " tax_age_group, metro_city, parents_senior, tax_declarations, pay_type, hourly_rate, location_id")
 
     def get_employee(self, client_id: str, code: str) -> EmployeeRecord:
         with self._tx() as c:
@@ -468,6 +468,35 @@ class SqlRepository:
             else:
                 c.run(f"INSERT INTO deduction_types ({self._DT_COLS}) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                       t.code, *args)
+
+    # --- client locations ----------------------------------------------------------------------
+    _LOC_COLS = ("id, client_id, name, state, address, city, pincode, pt_registration, lwf_registration, esi_code,"
+                 " se_registration, head_office, active")
+
+    @staticmethod
+    def _location(row) -> ClientLocation:
+        *head, ho, active = row
+        return ClientLocation(*[v or "" for v in head], head_office=bool(ho), active=bool(active))
+
+    def list_locations(self, client_id: str) -> list[ClientLocation]:
+        with self._tx() as c:
+            rows = c.all(f"SELECT {self._LOC_COLS} FROM client_locations WHERE client_id = ?", client_id)
+        return sorted((self._location(r) for r in rows), key=lambda l: (not l.head_office, l.name.lower()))
+
+    def get_location(self, location_id: str) -> ClientLocation:
+        with self._tx() as c:
+            row = c.one(f"SELECT {self._LOC_COLS} FROM client_locations WHERE id = ?", location_id)
+        if not row:
+            raise NotFound(f"Location {location_id!r} not found")
+        return self._location(row)
+
+    def save_location(self, loc: ClientLocation) -> None:
+        with self._tx() as c:
+            c.run("DELETE FROM client_locations WHERE id = ?", loc.id)
+            c.run(f"INSERT INTO client_locations ({self._LOC_COLS}) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                  loc.id, loc.client_id, loc.name, loc.state, loc.address, loc.city, loc.pincode,
+                  loc.pt_registration, loc.lwf_registration, loc.esi_code, loc.se_registration,
+                  loc.head_office, loc.active)
 
     # --- time sheets ---------------------------------------------------------------------------
     def list_timesheets(self, client_id: str, month) -> list[Timesheet]:

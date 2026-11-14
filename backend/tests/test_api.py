@@ -377,3 +377,17 @@ def test_password_and_reopen_api(client, ops):
     client.post(f"/runs/{run['id']}/approve", headers=ops)
     r = client.post(f"/runs/{run['id']}/reopen", headers=ops, json={"reason": "fix attendance"})
     assert r.status_code == 200 and r.json()["status"] == "draft"
+
+
+def test_locations_api(client, ops):
+    client.post("/clients", headers=ops, json={"id": "acme", "legal_name": "Acme", "state": "TG"})
+    rows = client.get("/clients/acme/locations", headers=ops).json()
+    assert rows[0]["head_office"] and rows[0]["state_name"] == "Telangana"
+    r = client.post("/clients/acme/locations", headers=ops, json={"name": "", "state": "XX"})
+    assert r.status_code == 422 and {e["label"] for e in r.json()["errors"]} >= {"Name", "State"}
+    plant = client.post("/clients/acme/locations", headers=ops, json={"name": "Plant", "state": "TG"}).json()
+    r = client.post("/clients/acme/employees", headers=ops, json={
+        "code": "E1", "name": "Ravi", "joined_on": "2026-04-01", "components": {"basic": 30000},
+        "location_id": plant["id"]})
+    assert r.json()["employee"]["location_id"] == plant["id"] and r.json()["employee"]["state"] == "TG"
+    assert next(x for x in client.get("/clients/acme/locations", headers=ops).json() if x["name"] == "Plant")["employees"] == 1

@@ -34,6 +34,7 @@ from ..services import tax as tax_rules
 from ..services.search import search as run_search
 from ..services.paycodes import CALC_LABELS as PAY_CALC_LABELS, TAX_LABELS as PAY_TAX_LABELS, PayCodeService, client_pay_codes
 from ..services.timesheets import TimeService
+from ..services.locations import LocationService
 from ..services.deductions import CALC_LABELS, TAX_SECTIONS, DeductionService, client_types
 from . import errors
 from . import schemas as s
@@ -150,6 +151,7 @@ def _employee_out(r: EmployeeRecord, profile=None) -> s.EmployeeOut:
     details = profile.details if profile else {}
     return s.EmployeeOut(code=r.code, name=e.name, joined_on=r.joined_on,
                          designation=details.get("designation", ""), department=details.get("department", ""),
+                         location_id=e.location_id, state=e.state,
                          exited_on=r.exited_on, components=r.structure.components,
                          monthly_total=r.structure.total, pay_type=e.pay_type, hourly_rate=e.hourly_rate,
                          flags={k: getattr(e, k) for k in PayrollService.EMPLOYEE_FLAGS},
@@ -225,7 +227,7 @@ def add_employee(client_id: str, body: s.EmployeeIn, actor: User = Depends(admin
     flags = body.model_dump(include={"pf_member", "eps_member", "pf_on_full_wages",
                                      "esi_covered", "pt_applicable", "lwf_applicable"})
     record = EmployeeRecord(client_id, Employee(code=body.code, name=body.name, **flags, pay_type=body.pay_type,
-                                                hourly_rate=body.hourly_rate or 0),
+                                                hourly_rate=body.hourly_rate or 0, location_id=body.location_id),
                             SalaryStructure(body.components), body.joined_on)
     warnings = svc.add_employee(record, user)
     if body.tax:
@@ -253,7 +255,8 @@ def update_employee(client_id: str, code: str, body: s.EmployeeUpdate, actor: Us
     auth.check_client(actor, client_id)
     warnings = svc.update_employee(client_id, code, actor.email, name=body.name,
                                    components=body.components, flags=body.flags,
-                                   pay_type=body.pay_type, hourly_rate=body.hourly_rate)
+                                   pay_type=body.pay_type, hourly_rate=body.hourly_rate,
+                                   location_id=body.location_id)
     return s.EmployeeCreated(employee=_employee_out(svc.repo.get_employee(client_id, code)), warnings=warnings)
 
 
@@ -937,3 +940,37 @@ def approve_time(client_id: str, month: str, body: s.TimeApproveIn, actor: User 
                  ts: TimeService = Depends(get_time), auth: AuthService = Depends(get_auth)):
     auth.check_client(actor, client_id)
     return {"changed": ts.approve(actor, client_id, month, body.codes, body.approve)}
+
+
+# --- client locations ----------------------------------------------------------------------------
+
+def _location_out(row):
+    loc = row["location"] if isinstance(row, dict) else row
+    out = {k: getattr(loc, k) for k in ("id", "name", "state", "address", "city", "pincode", "pt_registration",
+                                        "lwf_registration", "esi_code", "se_registration", "head_office", "active")}
+    out["state_name"] = rule_schemas.STATE_NAMES.get(loc.state, loc.state)
+    if isinstance(row, dict):
+        out.update(employees=row["employees"], rules_ready=row["rules_ready"])
+    return out
+
+
+@app.get("/clients/{client_id}/locations")
+def client_locations(client_id: str, actor: User = Depends(admin_user), svc: PayrollService = Depends(get_service),
+                     auth: AuthService = Depends(get_auth)):
+    """The client's locations (head office first) with how many employees work at each."""
+    auth.check_client(actor, client_id)
+    return [_location_out(r) for r in LocationService(svc).locations(client_id)]
+
+
+@app.post("/clients/{client_id}/locations", status_code=201)
+def add_location(client_id: str, body: s.LocationIn, actor: User = Depends(admin_user),
+                 svc: PayrollService = Depends(get_service), auth: AuthService = Depends(get_auth)):
+    auth.check_client(actor, client_id)
+    return _location_out(LocationService(svc).save(actor, client_id, body.model_dump()))
+
+
+@app.put("/clients/{client_id}/locations/{location_id}")
+def edit_location(client_id: str, location_id: str, body: s.LocationIn, actor: User = Depends(admin_user),
+                  svc: PayrollService = Depends(get_service), auth: AuthService = Depends(get_auth)):
+    auth.check_client(actor, client_id)
+    return _location_out(LocationService(svc).save(actor, client_id, body.model_dump(), location_id))

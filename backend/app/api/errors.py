@@ -87,6 +87,10 @@ FIELD_LABELS = {
     "note": "Note",
     # deductions
     "type_code": "Code",
+    "location_id": "Location",
+    "head_office": "Head office",
+    "lwf_registration": "LWF registration",
+    "se_registration": "Shops & Establishments registration",
     "current_password": "Current password",
     "new_password": "New password",
     "reason": "Reason",

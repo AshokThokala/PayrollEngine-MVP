@@ -45,6 +45,7 @@ class Employee:
     tax_declarations: dict = field(default_factory=dict)
     pay_type: str = "salaried"  # "salaried" (monthly salary structure) or "hourly" (hours x hourly rate)
     hourly_rate: Decimal = ZERO  # rupees per hour, for hourly employees
+    location_id: str | None = None  # the client location they work at; its state sets PT and LWF
 
     def __post_init__(self):
         self.hourly_rate = D(self.hourly_rate or 0)

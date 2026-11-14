@@ -53,6 +53,12 @@ Click a group heading to fold it away, « to shrink the menu to icons (»), or t
 to hide the menu completely for more room (☰ brings it back) - the browser remembers all three. Every page
 opens with a header: where you are (group › item › tab · client), what the page is for, then its tabs.
 
+- **Client locations** (Clients → open a client → *Locations*): head office, branches, factories and sites, each with
+  address, state, PIN, PT and LWF registrations, ESI sub-code and Shops & Establishments registration. Every client gets
+  a *Head office* from its own details; click a row to edit, *+ Add location* for more. Each employee works at a
+  location (*Work location* on the Employees form, head office by default), and **its state decides Professional Tax
+  and LWF** for them - a Bengaluru branch employee pays Karnataka PT. Moving a location to another state moves its
+  employees' PT/LWF too; a location with employees can't be switched off. States need PT/LWF rules first.
 - **Employee details** (Employees → open an employee): a header with initials, designation, department, pay type,
   joining date, gender and age, then *Employee details* in tabs - **Personal** (date of birth, gender, marital status,
   father's or spouse's name and relation - needed for EPFO/ESIC registration - nationality, blood group, disability),
@@ -279,6 +285,7 @@ python -m pytest
 | `audit_events` | Append-only audit log (UPDATE/DELETE blocked on Postgres) |
 | `billing_plans` | One billing plan per client: plan, rates, billing email |
 | `invoices` | Monthly invoices: lines (JSON), GST split, number, status, payment reference |
+| `client_locations` | A client's head office and branches: address, state, PT/LWF/ESI/S&E registrations |
 | `timesheets` | Monthly time per employee: day statuses, hours and overtime (JSON), draft/approved |
 | `pay_codes` | Master list of pay codes: salary or variable, tax treatment, default, payslip name |
 | `client_pay_codes` | Pay codes each client uses, with its default and payslip name |

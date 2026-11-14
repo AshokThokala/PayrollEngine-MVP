@@ -24,13 +24,14 @@ const FLAGS = [
 
 const EMPTY = {
   code: '', name: '', joined_on: today(),
-  basic: '', da: '', hra: '', conveyance: '', special_allowance: '', pay_type: 'salaried', hourly_rate: '',
+  basic: '', da: '', hra: '', conveyance: '', special_allowance: '', pay_type: 'salaried', hourly_rate: '', location_id: '',
   esi: 'auto', pf_member: true, eps_member: true, pf_on_full_wages: false, pt_applicable: true, lwf_applicable: true,
 }
 
 function formFrom(emp, list) {
   const f = { ...EMPTY, code: emp.code, name: emp.name, joined_on: emp.joined_on,
-    pay_type: emp.pay_type || 'salaried', hourly_rate: Number(emp.hourly_rate) ? String(Number(emp.hourly_rate)) : '' }
+    pay_type: emp.pay_type || 'salaried', hourly_rate: Number(emp.hourly_rate) ? String(Number(emp.hourly_rate)) : '',
+    location_id: emp.location_id || '' }
   const keys = new Set([...list.map(([k]) => k), ...Object.keys(emp.components)])
   ;[...keys].forEach((k) => { f[k] = emp.components[k] !== undefined ? String(Number(emp.components[k])) : '' })
   Object.entries(emp.flags || {}).forEach(([k, v]) => {
@@ -59,6 +60,11 @@ export default function EmployeesPage({ client, onViewAs, openRequest }) {
   const [loadedFor, setLoadedFor] = useState(null)
   const handled = useRef(null)
   // Salary fields = the fixed pay codes this client uses (Client pay codes), with their payslip names.
+  const [locations, setLocations] = useState([])
+  useEffect(() => {
+    api.clientLocations(client.id).then(setLocations).catch(() => setLocations([]))
+  }, [client.id])
+  const locationName = (id) => (locations.find((l) => l.id === id) || (!id && locations.find((l) => l.head_office)))?.name
   const [profileFacts, setProfileFacts] = useState({}) // gender and date of birth for the header, from EmployeeDetails
   useEffect(() => { setProfileFacts({}) }, [selectedCode])
   const [payCodes, setPayCodes] = useState([])
@@ -169,6 +175,7 @@ export default function EmployeesPage({ client, onViewAs, openRequest }) {
         code: form.code, name: form.name, joined_on: form.joined_on,
         components: form.pay_type === 'hourly' ? {} : components(), ...flags(), tax,
         pay_type: form.pay_type, hourly_rate: form.pay_type === 'hourly' ? Number(form.hourly_rate) || null : null,
+        location_id: form.location_id || null,
       })
       const list = await load()
       const created = list.find((x) => x.code === res.employee.code)
@@ -184,7 +191,7 @@ export default function EmployeesPage({ client, onViewAs, openRequest }) {
     run(async () => {
       const hourlyNow = form.pay_type === 'hourly'
       const res = await api.updateEmployee(client.id, selectedCode, {
-        name: form.name, flags: flags(), pay_type: form.pay_type,
+        name: form.name, flags: flags(), pay_type: form.pay_type, location_id: form.location_id || null,
         ...(hourlyNow ? { hourly_rate: Number(form.hourly_rate) || null } : { components: components() }),
       })
       await load()
@@ -211,6 +218,18 @@ export default function EmployeesPage({ client, onViewAs, openRequest }) {
 
   const payTypeField = (
     <div className="row">
+      {locations.length > 0 && (
+        <label>
+          Work location
+          <select value={form.location_id || ''} onChange={set('location_id')} {...invalid('location_id')}>
+            {mode === 'add' && <option value="">{locations.find((l) => l.head_office)?.name || 'Head office'} (default)</option>}
+            {locations.filter((l) => l.active || l.id === form.location_id).map((l) => (
+              <option key={l.id} value={l.id}>{l.name} · {l.state_name}</option>
+            ))}
+          </select>
+          <FieldError label="Location" error={fieldErrors.location_id} />
+        </label>
+      )}
       <label>
         Pay type
         <select value={form.pay_type} onChange={set('pay_type')} {...invalid('pay_type')}>
@@ -356,6 +375,7 @@ export default function EmployeesPage({ client, onViewAs, openRequest }) {
                     <span className="chip">{selected.code}</span>
                     <span className="chip">{selected.pay_type === 'hourly' ? 'Hourly' : 'Salaried'}</span>
                     <span className="chip">Joined {selected.joined_on}</span>
+                    {locationName(selected.location_id) && <span className="chip">{locationName(selected.location_id)} · {selected.state}</span>}
                     {profileFacts.gender && <span className="chip">{profileFacts.gender}</span>}
                     {ageFrom(profileFacts.date_of_birth) !== null && <span className="chip">{ageFrom(profileFacts.date_of_birth)} yrs</span>}
                     {selected.exited_on && <span className="chip warn">Left {selected.exited_on}</span>}
