@@ -11,7 +11,8 @@ from datetime import date, datetime
 from decimal import Decimal
 from typing import Any, Iterator
 
-from ..domain import (AuditEvent, BillingPlan, Client, EmployeeProfile, EmployeeRecord, Filing, FilingStatus,
+from ..domain import (AuditEvent, BillingPlan, Client, DeductionCalc, DeductionCategory, DeductionType,
+                      EmployeeDeduction, EmployeeProfile, EmployeeRecord, Filing, FilingStatus,
                       Invite, Invoice, InvoiceStatus, PayrollRun, ProfileStatus, Role, RunStatus, RunSummary, StatutoryRule, User,
                       UserStatus)
 from ..engine.models import Employee, Line, Payslip, SalaryStructure
@@ -429,6 +430,74 @@ class SqlRepository:
             c.run(f"INSERT INTO billing_plans ({self._PLAN_COLS}) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
                   plan.client_id, plan.plan, plan.rate_per_employee, plan.minimum_fee,
                   plan.onboarding_fee, plan.gst_rate, plan.billing_email, plan.starts_on)
+
+    # --- deduction master and employee deductions -------------------------------------------
+    _DT_COLS = ("code, name, category, calc, payslip_label, default_value, max_amount, tax_section,"
+                " description, active, system")
+    _ED_COLS = "id, client_id, employee_code, deduction_code, value, start_month, end_month, note, created_by"
+
+    @staticmethod
+    def _dtype(row) -> DeductionType:
+        code, name, cat, calc, label, dv, mx, sec, desc, active, system = row
+        return DeductionType(code, name, DeductionCategory(cat), DeductionCalc(calc), label or "",
+                             None if dv is None else _dec(dv), None if mx is None else _dec(mx),
+                             sec or "", desc or "", bool(active), bool(system))
+
+    def list_deduction_types(self) -> list[DeductionType]:
+        with self._tx() as c:
+            rows = c.all(f"SELECT {self._DT_COLS} FROM deduction_types")
+        order = {"statutory": 0, "voluntary": 1, "recovery": 2}
+        return sorted((self._dtype(r) for r in rows), key=lambda t: (order[t.category.value], t.name.lower()))
+
+    def get_deduction_type(self, code: str) -> DeductionType | None:
+        with self._tx() as c:
+            row = c.one(f"SELECT {self._DT_COLS} FROM deduction_types WHERE code = ?", code)
+        return self._dtype(row) if row else None
+
+    def save_deduction_type(self, t: DeductionType) -> None:
+        with self._tx() as c:
+            args = (t.name, t.category.value, t.calc.value, t.payslip_label, t.default_value, t.max_amount,
+                    t.tax_section, t.description, t.active, t.system)
+            if c.one("SELECT 1 FROM deduction_types WHERE code = ?", t.code):
+                c.run("UPDATE deduction_types SET name = ?, category = ?, calc = ?, payslip_label = ?,"
+                      " default_value = ?, max_amount = ?, tax_section = ?, description = ?, active = ?,"
+                      " system = ? WHERE code = ?", *args, t.code)
+            else:
+                c.run(f"INSERT INTO deduction_types ({self._DT_COLS}) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                      t.code, *args)
+
+    @staticmethod
+    def _ededuct(row) -> EmployeeDeduction:
+        iid, cid, emp, code, value, start, end, note, by = row
+        return EmployeeDeduction(iid, cid, emp, code, _dec(value), _date(start), _date(end), note or "", by or "")
+
+    def list_employee_deductions(self, client_id: str, employee_code: str | None = None) -> list[EmployeeDeduction]:
+        sql = f"SELECT {self._ED_COLS} FROM employee_deductions WHERE client_id = ?"
+        args = [client_id]
+        if employee_code is not None:
+            sql += " AND employee_code = ?"
+            args.append(employee_code)
+        with self._tx() as c:
+            rows = c.all(sql + " ORDER BY employee_code, start_month, id", *args)
+        return [self._ededuct(r) for r in rows]
+
+    def get_employee_deduction(self, deduction_id: str) -> EmployeeDeduction:
+        with self._tx() as c:
+            row = c.one(f"SELECT {self._ED_COLS} FROM employee_deductions WHERE id = ?", deduction_id)
+        if not row:
+            raise NotFound(f"Deduction {deduction_id!r} not found")
+        return self._ededuct(row)
+
+    def save_employee_deduction(self, d: EmployeeDeduction) -> None:
+        with self._tx() as c:
+            c.run("DELETE FROM employee_deductions WHERE id = ?", d.id)
+            c.run(f"INSERT INTO employee_deductions ({self._ED_COLS}) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                  d.id, d.client_id, d.employee_code, d.deduction_code, d.value, d.start_month, d.end_month,
+                  d.note, d.created_by)
+
+    def delete_employee_deduction(self, deduction_id: str) -> None:
+        with self._tx() as c:
+            c.run("DELETE FROM employee_deductions WHERE id = ?", deduction_id)
 
     # --- invites and onboarding profiles ----------------------------------------------------
     _INVITE_COLS = ("id, client_id, employee_code, email, token_hash, created_by, created_at, expires_at,"

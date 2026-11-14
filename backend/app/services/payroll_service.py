@@ -93,6 +93,36 @@ class PayrollService:
         self._rules_cache = None
 
     # --- compliance rules ------------------------------------------------------
+    def _standing_deductions(self, client_id: str, end: date) -> dict:
+        """Standing employee deductions in force in the month ending `end`, by employee code."""
+        month = end.replace(day=1)
+        types = {t.code: t for t in self.repo.list_deduction_types()}
+        out: dict[str, list] = {}
+        for d in self.repo.list_employee_deductions(client_id):
+            t = types.get(d.deduction_code)
+            if t is None or not t.active or d.start_month > month or (d.end_month and d.end_month < month):
+                continue
+            out.setdefault(d.employee_code, []).append((t, d))
+        return out
+
+    @staticmethod
+    def _deductions_for(record, standing, paid, days, mi):
+        """This month's other deductions: standing ones, then one-off amounts entered for the run
+        (a one-off with the same code replaces the standing amount)."""
+        from .deductions import monthly_amount
+        ratio = D(paid) / D(days) if days else D(0)
+        comps = record.structure.components
+        basic_da = (comps.get("basic", D(0)) + comps.get("da", D(0))) * ratio
+        gross = record.structure.total * ratio
+        others: dict = {}
+        labels: dict = {}
+        for t, d in standing:
+            others[t.code] = others.get(t.code, D(0)) + monthly_amount(t, d.value, basic_da, gross)
+            labels[t.code] = t.payslip_label or t.name
+        for code, amount in mi.other_deductions.items():
+            others[code] = D(amount)
+        return {k: v for k, v in others.items() if v > 0}, labels
+
     def ensure_rules_seeded(self, user: str = "system") -> int:
         """Bring the default rules (app/rules/*.json) into the rules table, safely.
 
@@ -103,8 +133,9 @@ class PayrollService:
           overwrites a value that is already there.
         Returns the number of rows added or filled.
         """
+        from .deductions import seed_deduction_types  # the deduction master ships with the rules
+        changes = seed_deduction_types(self.repo)
         existing = {r.id: r for r in self.repo.list_rules()}
-        changes = 0
         for scope, category, vf, vt, params, source in RuleBook.load().default_records():
             rule_id = f"{scope}:{category}:{vf.isoformat()}"
             if rule_id in existing:
@@ -345,16 +376,18 @@ class PayrollService:
         ytd = self._ytd(recent, end)
         previous = recent[-1] if recent else None
         run = PayrollRun(run_id, client_id, end, RunStatus.DRAFT, prepared_by=user)
+        standing = self._standing_deductions(client_id, end)
 
         for record in sorted(active, key=lambda r: r.code):
             mi = inputs.get(record.code, MonthInput())
             paid = D(mi.paid_days) if mi.paid_days is not None else _default_paid_days(record, end)
             year_to_date = ytd.get(record.code, {})
+            others, labels = self._deductions_for(record, standing.get(record.code, []), paid, days, mi)
             slip = compute_payslip(
                 record.employee, record.structure,
                 PayInputs(period=end, days_in_month=days, paid_days=paid,
                           overtime=mi.overtime, other_earnings=mi.other_earnings,
-                          other_deductions=mi.other_deductions,
+                          other_deductions=others, deduction_labels=labels,
                           fy_month_index=fy_month_index(end),
                           **year_to_date),
                 rules,

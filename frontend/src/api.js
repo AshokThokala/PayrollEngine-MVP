@@ -91,6 +91,16 @@ export const api = {
   signupEmployee: (body) => request('POST', '/auth/signup/employee', body),
   me: () => request('GET', '/auth/me'),
   listUsers: () => request('GET', '/users'),
+  deductionTypes: () => request('GET', '/deduction-types'),
+  addDeductionType: (body) => request('POST', '/deduction-types', body),
+  editDeductionType: (code, body) => request('PUT', `/deduction-types/${enc(code)}`, body),
+  employeeDeductions: (clientId, code) => request('GET', `/clients/${enc(clientId)}/employees/${enc(code)}/deductions`),
+  addEmployeeDeduction: (clientId, code, body) =>
+    request('POST', `/clients/${enc(clientId)}/employees/${enc(code)}/deductions`, body),
+  editEmployeeDeduction: (clientId, code, id, body) =>
+    request('PUT', `/clients/${enc(clientId)}/employees/${enc(code)}/deductions/${enc(id)}`, body),
+  deleteEmployeeDeduction: (clientId, code, id) =>
+    request('DELETE', `/clients/${enc(clientId)}/employees/${enc(code)}/deductions/${enc(id)}`),
   addUser: (body) => request('POST', '/users', body),
   userAction: (userId, action) => request('POST', `/users/${enc(userId)}/${action}`),
   myEmployee: () => request('GET', '/me/employee'),

@@ -117,7 +117,7 @@ def compute_payslip(employee: Employee, structure: SalaryStructure,
 
     # 7. Other deductions (advances, canteen, ...).
     for code, amt in inputs.other_deductions.items():
-        deductions.append(Line(code, _label(code), paise(amt)))
+        deductions.append(Line(code, inputs.deduction_labels.get(code) or _label(code), paise(amt)))
 
     slip = Payslip(employee.code, on, earnings, deductions, employer, warnings, wages)
     if slip.net_pay < 0:

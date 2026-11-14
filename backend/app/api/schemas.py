@@ -305,3 +305,24 @@ class UserIn(BaseModel):
     email: str
     password: str
     client_id: str | None = None  # empty = platform admin (platform admins only)
+
+
+class DeductionTypeIn(BaseModel):
+    code: str = ""
+    name: str = ""
+    category: str = ""
+    calc: str = ""
+    payslip_label: str = ""
+    default_value: str | None = None
+    max_amount: str | None = None
+    tax_section: str = ""
+    description: str = ""
+    active: bool = True
+
+
+class EmployeeDeductionIn(BaseModel):
+    deduction_code: str = ""
+    value: str | None = None
+    start_month: str = ""
+    end_month: str | None = None
+    note: str = ""

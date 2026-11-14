@@ -7,6 +7,7 @@ import BillingPage from './pages/BillingPage.jsx'
 import ClientOnboardingPage from './pages/ClientOnboardingPage.jsx'
 import ClientsPage from './pages/ClientsPage.jsx'
 import EmployeesPage from './pages/EmployeesPage.jsx'
+import DeductionsPage from './pages/DeductionsPage.jsx'
 import EmployeeOnboardingPage from './pages/EmployeeOnboardingPage.jsx'
 import EmployeePortal from './pages/EmployeePortal.jsx'
 import InviteRegistration from './pages/InviteRegistration.jsx'
@@ -86,6 +87,7 @@ const NAV = [
   { id: 'billing', label: 'Billing', icon: '◫', needsClient: true },
   { id: 'rules', label: 'Compliance rules', icon: '§', platformOnly: true },
   { id: 'tax', label: 'Tax rules', icon: '%' },
+  { id: 'deductions', label: 'Deduction types', icon: '−' },
 ]
 
 function AdminShell({ user, onLogout, onViewAs }) {
@@ -201,6 +203,7 @@ function AdminShell({ user, onLogout, onViewAs }) {
           )}
           {tab === 'users' && <UsersPage user={user} clients={clients} />}
           {tab === 'rules' && platform && <RulesPage key={ruleCategory || 'all'} initialCategory={ruleCategory} />}
+          {tab === 'deductions' && <DeductionsPage canEdit={platform} />}
           {tab === 'tax' && (
             <TaxRulesPage
               canEdit={platform}
