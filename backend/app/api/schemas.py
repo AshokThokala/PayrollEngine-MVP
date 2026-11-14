@@ -333,3 +333,27 @@ class ClientDeductionIn(BaseModel):
     default_value: str | None = None
     max_amount: str | None = None
     payslip_label: str = ""
+
+
+class PayCodeIn(BaseModel):
+    code: str = ""
+    name: str = ""
+    kind: str = ""
+    tax: str = "taxable"
+    calc: str = "fixed"
+    default_value: str | None = None
+    payslip_label: str = ""
+    tax_section: str = ""
+    description: str = ""
+    core: bool = False
+    active: bool = True
+
+
+class ClientPayCodeIn(BaseModel):
+    enabled: bool = True
+    default_value: str | None = None
+    payslip_label: str = ""
+
+
+class EmployeePayIn(BaseModel):
+    components: dict[str, str | float | int | None] = {}

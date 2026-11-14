@@ -21,7 +21,7 @@ def svc(repo):
     s.ensure_rules_seeded()
     s.add_client(Client(id="acme", legal_name="Acme", state="TG"), "ops")
     s.add_employee(EmployeeRecord("acme", Employee(code="E1", name="Ravi"),
-                                  SalaryStructure({"basic": 30000, "hra": 12000, "special": 8000}),
+                                  SalaryStructure({"basic": 30000, "hra": 12000, "special_allowance": 8000}),
                                   date(2026, 4, 1)), "ops")
     ds = DeductionService(s)
     for code in ("vpf", "loan_emi", "canteen", "nps_employee"):

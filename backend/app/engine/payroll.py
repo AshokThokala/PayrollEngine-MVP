@@ -38,11 +38,11 @@ def compute_payslip(employee: Employee, structure: SalaryStructure,
     # 1. Earnings, prorated for paid days.
     factor = inputs.paid_days / inputs.days_in_month
     earned = {k: paise(v * factor) for k, v in structure.components.items()}
-    earnings = [Line(k, _label(k), v) for k, v in earned.items()]
+    earnings = [Line(k, inputs.earning_labels.get(k) or _label(k), v) for k, v in earned.items()]
     if inputs.overtime:
         earnings.append(Line("overtime", "Overtime", paise(inputs.overtime)))
     for code, amt in inputs.other_earnings.items():
-        earnings.append(Line(code, _label(code), paise(amt)))
+        earnings.append(Line(code, inputs.earning_labels.get(code) or _label(code), paise(amt)))
     gross = sum((l.amount for l in earnings), ZERO)
 
     # 2. Statutory wages under the Code on Wages (overtime excluded).

@@ -94,6 +94,16 @@ export const api = {
   deductionTypes: () => request('GET', '/deduction-types'),
   addDeductionType: (body) => request('POST', '/deduction-types', body),
   editDeductionType: (code, body) => request('PUT', `/deduction-types/${enc(code)}`, body),
+  payCodes: () => request('GET', '/pay-codes'),
+  addPayCode: (body) => request('POST', '/pay-codes', body),
+  editPayCode: (code, body) => request('PUT', `/pay-codes/${enc(code)}`, body),
+  clientPayCodes: (clientId) => request('GET', `/clients/${enc(clientId)}/pay-codes`),
+  setClientPayCode: (clientId, code, body) => request('PUT', `/clients/${enc(clientId)}/pay-codes/${enc(code)}`, body),
+  availablePayCodes: (clientId) => request('GET', `/clients/${enc(clientId)}/pay-codes/available`),
+  employeePay: (clientId, includeExited = false) =>
+    request('GET', `/clients/${enc(clientId)}/employee-pay${includeExited ? '?include_exited=true' : ''}`),
+  setEmployeePay: (clientId, code, components) =>
+    request('PUT', `/clients/${enc(clientId)}/employees/${enc(code)}/pay`, { components }),
   clientDeductions: (clientId) => request('GET', `/clients/${enc(clientId)}/deductions`),
   setClientDeduction: (clientId, code, body) => request('PUT', `/clients/${enc(clientId)}/deductions/${enc(code)}`, body),
   availableDeductions: (clientId) => request('GET', `/clients/${enc(clientId)}/deductions/available`),

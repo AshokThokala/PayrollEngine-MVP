@@ -38,6 +38,17 @@ The admin who processed a payroll run can approve it. Set `REQUIRE_SEPARATE_APPR
 admin (maker-checker).
 
 ### Working in the app
+- **Pay codes (earnings), at three levels:**
+  - **Pay code master** (ClearPay4U team): every kind of pay - *Salary* pay codes (basic, DA, retaining allowance,
+    HRA, special allowance, conveyance, CCA, medical, LTA, children education, meal vouchers, telephone and fuel
+    reimbursement, shift and uniform allowance) and *Variable* ones (performance and statutory bonus, incentive,
+    arrears, leave encashment, joining and referral bonus), each with its tax treatment, tax section, default (₹ or
+    % of basic) and payslip name. Basic, DA and retaining allowance are marked as *wages* (Code on Wages).
+  - **Client pay codes**: switch pay codes on or off for the client (basic, DA, HRA, special allowance and
+    conveyance are on by default; basic always), with the client's own default and payslip name.
+  - **Employee pay**: every employee's monthly salary by pay code in one grid; click a row to change the amounts
+    (with the 50% wage check). The Employees form uses the same pay codes. Variable pay is entered per employee
+    when calculating a payroll run. Salaries and run inputs can only use pay codes the client has switched on.
 - **Deductions, at three levels:**
   - **Deduction master** (ClearPay4U team): every deduction an employee in India can have. *Statutory* (PF, ESI, PT,
     LWF, TDS) come from the compliance rules - only their names can change. *Voluntary* (VPF, NPS, insurance,
@@ -236,6 +247,8 @@ python -m pytest
 | `audit_events` | Append-only audit log (UPDATE/DELETE blocked on Postgres) |
 | `billing_plans` | One billing plan per client: plan, rates, billing email |
 | `invoices` | Monthly invoices: lines (JSON), GST split, number, status, payment reference |
+| `pay_codes` | Master list of pay codes: salary or variable, tax treatment, default, payslip name |
+| `client_pay_codes` | Pay codes each client uses, with its default and payslip name |
 | `deduction_types` | Master list of deductions (statutory, voluntary, recovery), calculation, cap, tax section |
 | `client_deductions` | Deductions each client uses, with the client's default, cap and payslip name |
 | `employee_deductions` | Standing deductions per employee: type, ₹ or %, first and last month |

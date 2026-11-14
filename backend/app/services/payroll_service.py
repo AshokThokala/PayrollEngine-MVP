@@ -93,6 +93,17 @@ class PayrollService:
         self._rules_cache = None
 
     # --- compliance rules ------------------------------------------------------
+    def _check_pay(self, client_id: str, codes, variable: bool = False) -> None:
+        from ..domain import PayCodeKind
+        from .paycodes import check_codes
+        if codes:
+            check_codes(self.repo, client_id, codes, PayCodeKind.VARIABLE if variable else PayCodeKind.FIXED,
+                        "inputs" if variable else "components")
+
+    def _pay_labels(self, client_id: str) -> dict[str, str]:
+        from .paycodes import client_pay_codes
+        return {c: (p.payslip_label or p.name) for c, p in client_pay_codes(self.repo, client_id).items()}
+
     def _standing_deductions(self, client_id: str, end: date) -> dict:
         """Standing employee deductions in force in the month ending `end`, by employee code."""
         from .deductions import client_types
@@ -134,8 +145,9 @@ class PayrollService:
           overwrites a value that is already there.
         Returns the number of rows added or filled.
         """
-        from .deductions import seed_deduction_types  # the deduction master ships with the rules
-        changes = seed_deduction_types(self.repo)
+        from .deductions import seed_deduction_types  # the deduction and pay code masters ship with the rules
+        from .paycodes import seed_pay_codes
+        changes = seed_deduction_types(self.repo) + seed_pay_codes(self.repo)
         existing = {r.id: r for r in self.repo.list_rules()}
         for scope, category, vf, vt, params, source in RuleBook.load().default_records():
             rule_id = f"{scope}:{category}:{vf.isoformat()}"
@@ -304,6 +316,7 @@ class PayrollService:
         warnings: list[str] = []
         if components is not None:
             structure = SalaryStructure(components)
+            self._check_pay(client_id, structure.components)
             if structure.total <= 0:
                 raise ServiceError("Enter at least one salary amount", field="components")
             if structure.components != record.structure.components:
@@ -327,6 +340,7 @@ class PayrollService:
         else:
             raise ServiceError(f"Employee code '{record.code}' is already used in this client", field="code")
         record.employee.state = client.state
+        self._check_pay(record.client_id, record.structure.components)
         self.repo.save_employee(record)
         self._audit(user, "employee.create", f"{record.client_id}/{record.code}")
         return self.structure_warnings(record.structure, record.joined_on)
@@ -337,6 +351,7 @@ class PayrollService:
     def update_salary(self, client_id: str, code: str, structure: SalaryStructure,
                       user: str) -> list[str]:
         record = self.repo.get_employee(client_id, code)
+        self._check_pay(client_id, structure.components)
         old = record.structure.components
         record.structure = structure
         self.repo.save_employee(record)
@@ -368,6 +383,9 @@ class PayrollService:
         if unknown:
             raise ServiceError(f"Unknown or inactive employees: {', '.join(sorted(unknown))}", field="inputs")
 
+        for mi in inputs.values():
+            self._check_pay(client_id, mi.other_earnings, variable=True)
+        pay_labels = self._pay_labels(client_id)
         rules = self.rules  # read once for the whole run
         days = calendar.monthrange(end.year, end.month)[1]
         # Only the locked runs we need: this financial year, plus last month for the
@@ -388,7 +406,7 @@ class PayrollService:
                 record.employee, record.structure,
                 PayInputs(period=end, days_in_month=days, paid_days=paid,
                           overtime=mi.overtime, other_earnings=mi.other_earnings,
-                          other_deductions=others, deduction_labels=labels,
+                          other_deductions=others, deduction_labels=labels, earning_labels=pay_labels,
                           fy_month_index=fy_month_index(end),
                           **year_to_date),
                 rules,

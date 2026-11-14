@@ -32,6 +32,7 @@ from ..services.employee_onboarding import EmployeeOnboardingService
 from ..mailer import SmtpMailer, app_url
 from ..services import tax as tax_rules
 from ..services.search import search as run_search
+from ..services.paycodes import CALC_LABELS as PAY_CALC_LABELS, TAX_LABELS as PAY_TAX_LABELS, PayCodeService, client_pay_codes
 from ..services.deductions import CALC_LABELS, TAX_SECTIONS, DeductionService, client_types
 from . import errors
 from . import schemas as s
@@ -788,3 +789,78 @@ def delete_employee_deduction(client_id: str, code: str, deduction_id: str, acto
     auth.check_client(actor, client_id)
     ds.delete_for_employee(actor, client_id, code, deduction_id)
     return {"ok": True}
+
+
+# --- pay codes (earnings): master, client, employee ------------------------------------------
+
+def get_paycodes(svc: PayrollService = Depends(get_service)) -> PayCodeService:
+    return PayCodeService(svc)
+
+
+def _paycode_out(p, wages: set[str]):
+    return {"code": p.code, "name": p.name, "kind": p.kind.value, "tax": p.tax.value, "tax_label": PAY_TAX_LABELS[p.tax.value],
+            "calc": p.calc, "calc_label": PAY_CALC_LABELS[p.calc], "default_value": p.default_value,
+            "payslip_label": p.payslip_label, "tax_section": p.tax_section, "description": p.description,
+            "core": p.core, "active": p.active, "system": p.system, "in_wages": p.code in wages}
+
+
+@app.get("/pay-codes")
+def pay_codes(actor: User = Depends(admin_user), pc: PayCodeService = Depends(get_paycodes)):
+    wages = pc.wage_codes()
+    return {"codes": [_paycode_out(p, wages) for p in pc.codes()], "tax": PAY_TAX_LABELS, "calcs": PAY_CALC_LABELS}
+
+
+@app.post("/pay-codes", status_code=201)
+def add_pay_code(body: s.PayCodeIn, actor: User = Depends(platform_admin), pc: PayCodeService = Depends(get_paycodes)):
+    return _paycode_out(pc.save_code(actor, body.model_dump()), pc.wage_codes())
+
+
+@app.put("/pay-codes/{code}")
+def edit_pay_code(code: str, body: s.PayCodeIn, actor: User = Depends(platform_admin),
+                  pc: PayCodeService = Depends(get_paycodes)):
+    return _paycode_out(pc.save_code(actor, body.model_dump(), code=code), pc.wage_codes())
+
+
+@app.get("/clients/{client_id}/pay-codes")
+def client_pay_code_settings(client_id: str, actor: User = Depends(admin_user), pc: PayCodeService = Depends(get_paycodes),
+                             auth: AuthService = Depends(get_auth)):
+    auth.check_client(actor, client_id)
+    wages = pc.wage_codes()
+    return [{**_paycode_out(r["code"], wages), "enabled": r["enabled"], "master_default_value": r["code"].default_value,
+             "master_payslip_label": r["code"].payslip_label, "default_value": r["default_value"],
+             "payslip_label": r["payslip_label"], "employees": r["employees"], "locked": r["locked"]}
+            for r in pc.client_settings(client_id)]
+
+
+@app.put("/clients/{client_id}/pay-codes/{code}")
+def set_client_pay_code(client_id: str, code: str, body: s.ClientPayCodeIn, actor: User = Depends(admin_user),
+                        pc: PayCodeService = Depends(get_paycodes), auth: AuthService = Depends(get_auth)):
+    auth.check_client(actor, client_id)
+    cp = pc.set_client(actor, client_id, code, body.model_dump())
+    return {"code": cp.pay_code, "enabled": cp.enabled, "default_value": cp.default_value, "payslip_label": cp.payslip_label}
+
+
+@app.get("/clients/{client_id}/pay-codes/available")
+def available_pay_codes(client_id: str, actor: User = Depends(admin_user), pc: PayCodeService = Depends(get_paycodes),
+                        auth: AuthService = Depends(get_auth)):
+    """Pay codes this client's employees can get (salary and variable), with the client's defaults and names."""
+    auth.check_client(actor, client_id)
+    wages = pc.wage_codes()
+    return [_paycode_out(p, wages) for p in client_pay_codes(pc.repo, client_id).values()]
+
+
+@app.get("/clients/{client_id}/employee-pay")
+def employee_pay_grid(client_id: str, include_exited: bool = False, actor: User = Depends(admin_user),
+                      pc: PayCodeService = Depends(get_paycodes), auth: AuthService = Depends(get_auth)):
+    """Every employee's monthly salary by pay code."""
+    auth.check_client(actor, client_id)
+    wages = pc.wage_codes()
+    grid = pc.employee_grid(client_id, include_exited)
+    return {"pay_codes": [_paycode_out(p, wages) for p in grid["pay_codes"]], "employees": grid["employees"]}
+
+
+@app.put("/clients/{client_id}/employees/{code}/pay")
+def set_employee_pay(client_id: str, code: str, body: s.EmployeePayIn, actor: User = Depends(admin_user),
+                     pc: PayCodeService = Depends(get_paycodes), auth: AuthService = Depends(get_auth)):
+    auth.check_client(actor, client_id)
+    return {"warnings": pc.set_employee_pay(actor, client_id, code, body.components)}
