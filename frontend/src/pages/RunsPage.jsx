@@ -100,7 +100,7 @@ export default function RunsPage({ client, user }) {
           {employees.length > 0 && (
             <details>
               <summary>Attendance and overtime (optional)</summary>
-              <p className="muted small">Leave paid days blank for a full month; joiners and leavers are prorated automatically.</p>
+              <p className="muted small">Time from <strong>Time entry</strong> is used automatically (absences, hours, overtime). Anything entered here replaces it for this run. Joiners and leavers are prorated.</p>
               <table className="compact">
                 <thead><tr><th>Employee</th><th>Paid days</th><th>Overtime ₹</th></tr></thead>
                 <tbody>

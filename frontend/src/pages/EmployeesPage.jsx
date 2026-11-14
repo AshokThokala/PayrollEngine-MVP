@@ -23,12 +23,13 @@ const FLAGS = [
 
 const EMPTY = {
   code: '', name: '', joined_on: today(),
-  basic: '', da: '', hra: '', conveyance: '', special_allowance: '',
+  basic: '', da: '', hra: '', conveyance: '', special_allowance: '', pay_type: 'salaried', hourly_rate: '',
   esi: 'auto', pf_member: true, eps_member: true, pf_on_full_wages: false, pt_applicable: true, lwf_applicable: true,
 }
 
 function formFrom(emp, list) {
-  const f = { ...EMPTY, code: emp.code, name: emp.name, joined_on: emp.joined_on }
+  const f = { ...EMPTY, code: emp.code, name: emp.name, joined_on: emp.joined_on,
+    pay_type: emp.pay_type || 'salaried', hourly_rate: Number(emp.hourly_rate) ? String(Number(emp.hourly_rate)) : '' }
   const keys = new Set([...list.map(([k]) => k), ...Object.keys(emp.components)])
   ;[...keys].forEach((k) => { f[k] = emp.components[k] !== undefined ? String(Number(emp.components[k])) : '' })
   Object.entries(emp.flags || {}).forEach(([k, v]) => {
@@ -163,7 +164,8 @@ export default function EmployeesPage({ client, onViewAs, openRequest }) {
     run(async () => {
       const res = await api.addEmployee(client.id, {
         code: form.code, name: form.name, joined_on: form.joined_on,
-        components: components(), ...flags(), tax,
+        components: form.pay_type === 'hourly' ? {} : components(), ...flags(), tax,
+        pay_type: form.pay_type, hourly_rate: form.pay_type === 'hourly' ? Number(form.hourly_rate) || null : null,
       })
       const list = await load()
       const created = list.find((x) => x.code === res.employee.code)
@@ -177,7 +179,11 @@ export default function EmployeesPage({ client, onViewAs, openRequest }) {
   const saveDetails = (e) => {
     e.preventDefault()
     run(async () => {
-      const res = await api.updateEmployee(client.id, selectedCode, { name: form.name, components: components(), flags: flags() })
+      const hourlyNow = form.pay_type === 'hourly'
+      const res = await api.updateEmployee(client.id, selectedCode, {
+        name: form.name, flags: flags(), pay_type: form.pay_type,
+        ...(hourlyNow ? { hourly_rate: Number(form.hourly_rate) || null } : { components: components() }),
+      })
       await load()
       setMessage(res.warnings.length
         ? { kind: 'warn', text: `Saved with a warning: ${res.warnings.join(' ')}` }
@@ -200,7 +206,34 @@ export default function EmployeesPage({ client, onViewAs, openRequest }) {
     setMessage({ kind: 'ok', text: `Marked as exited on ${exitOn}.` })
   })
 
-  const salaryFields = (
+  const payTypeField = (
+    <div className="row">
+      <label>
+        Pay type
+        <select value={form.pay_type} onChange={set('pay_type')} {...invalid('pay_type')}>
+          <option value="salaried">Salaried (monthly salary)</option>
+          <option value="hourly">Hourly (paid for hours worked)</option>
+        </select>
+        <FieldError label="Pay type" error={fieldErrors.pay_type} />
+      </label>
+      {form.pay_type === 'hourly' && (
+        <label>
+          Hourly rate (₹)
+          <input type="number" min="0" step="0.01" value={form.hourly_rate} onChange={set('hourly_rate')} {...invalid('hourly_rate')} />
+          <FieldError label="Hourly rate" error={fieldErrors.hourly_rate} />
+        </label>
+      )}
+    </div>
+  )
+
+  const salaryFields = form.pay_type === 'hourly' ? (
+    <>
+      {payTypeField}
+      <p className="muted small">Pay comes from the hours entered on <strong>Time entry</strong> each month (hours × rate, overtime at 2×). All of it counts as wages for PF and ESI.</p>
+    </>
+  ) : (
+    <>
+    {payTypeField}
     <fieldset>
       <legend>Monthly salary (₹)</legend>
       {FIELDS.map(([k, label]) => (
@@ -216,6 +249,7 @@ export default function EmployeesPage({ client, onViewAs, openRequest }) {
         )}
       </div>
     </fieldset>
+    </>
   )
 
   const statutoryFields = (
@@ -259,7 +293,7 @@ export default function EmployeesPage({ client, onViewAs, openRequest }) {
                     onClick={() => select(emp)} onKeyDown={(e) => { if (e.key === 'Enter') select(emp) }}>
                     <td><strong>{emp.name}</strong></td>
                     <td>{emp.code}</td>
-                    <td className="num">{money(emp.monthly_total)}</td>
+                    <td className="num">{emp.pay_type === 'hourly' ? `₹${Number(emp.hourly_rate)}/h` : money(emp.monthly_total)}</td>
                     <td>{emp.exited_on ? <span className="tag">Left {emp.exited_on}</span> : <span className="tag locked">Active</span>}</td>
                   </tr>
                 ))}

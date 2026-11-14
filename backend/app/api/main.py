@@ -33,6 +33,7 @@ from ..mailer import SmtpMailer, app_url
 from ..services import tax as tax_rules
 from ..services.search import search as run_search
 from ..services.paycodes import CALC_LABELS as PAY_CALC_LABELS, TAX_LABELS as PAY_TAX_LABELS, PayCodeService, client_pay_codes
+from ..services.timesheets import TimeService
 from ..services.deductions import CALC_LABELS, TAX_SECTIONS, DeductionService, client_types
 from . import errors
 from . import schemas as s
@@ -140,7 +141,7 @@ def _employee_out(r: EmployeeRecord) -> s.EmployeeOut:
     e = r.employee
     return s.EmployeeOut(code=r.code, name=e.name, joined_on=r.joined_on,
                          exited_on=r.exited_on, components=r.structure.components,
-                         monthly_total=r.structure.total,
+                         monthly_total=r.structure.total, pay_type=e.pay_type, hourly_rate=e.hourly_rate,
                          flags={k: getattr(e, k) for k in PayrollService.EMPLOYEE_FLAGS},
                          tax=s.TaxProfile(tax_regime=e.tax_regime, tax_age_group=e.tax_age_group,
                                           metro_city=e.metro_city, parents_senior=e.parents_senior,
@@ -213,7 +214,8 @@ def add_employee(client_id: str, body: s.EmployeeIn, actor: User = Depends(admin
     user = actor.email
     flags = body.model_dump(include={"pf_member", "eps_member", "pf_on_full_wages",
                                      "esi_covered", "pt_applicable", "lwf_applicable"})
-    record = EmployeeRecord(client_id, Employee(code=body.code, name=body.name, **flags),
+    record = EmployeeRecord(client_id, Employee(code=body.code, name=body.name, **flags, pay_type=body.pay_type,
+                                                hourly_rate=body.hourly_rate or 0),
                             SalaryStructure(body.components), body.joined_on)
     warnings = svc.add_employee(record, user)
     if body.tax:
@@ -239,7 +241,8 @@ def update_employee(client_id: str, code: str, body: s.EmployeeUpdate, actor: Us
     """Edit name, statutory settings and salary (a salary change is kept as a new version)."""
     auth.check_client(actor, client_id)
     warnings = svc.update_employee(client_id, code, actor.email, name=body.name,
-                                   components=body.components, flags=body.flags)
+                                   components=body.components, flags=body.flags,
+                                   pay_type=body.pay_type, hourly_rate=body.hourly_rate)
     return s.EmployeeCreated(employee=_employee_out(svc.repo.get_employee(client_id, code)), warnings=warnings)
 
 
@@ -864,3 +867,32 @@ def set_employee_pay(client_id: str, code: str, body: s.EmployeePayIn, actor: Us
                      pc: PayCodeService = Depends(get_paycodes), auth: AuthService = Depends(get_auth)):
     auth.check_client(actor, client_id)
     return {"warnings": pc.set_employee_pay(actor, client_id, code, body.components)}
+
+
+# --- time entry ----------------------------------------------------------------------------------
+
+def get_time(svc: PayrollService = Depends(get_service)) -> TimeService:
+    return TimeService(svc)
+
+
+@app.get("/clients/{client_id}/time/{month}")
+def time_month(client_id: str, month: str, actor: User = Depends(admin_user), ts: TimeService = Depends(get_time),
+               auth: AuthService = Depends(get_auth)):
+    """Every active employee's time for the month (YYYY-MM), with totals and overtime pay."""
+    auth.check_client(actor, client_id)
+    return ts.month_view(client_id, month)
+
+
+@app.put("/clients/{client_id}/employees/{code}/time/{month}")
+def save_time(client_id: str, code: str, month: str, body: s.TimesheetIn, actor: User = Depends(admin_user),
+              ts: TimeService = Depends(get_time), auth: AuthService = Depends(get_auth)):
+    auth.check_client(actor, client_id)
+    t = ts.save(actor, client_id, code, month, body.days, body.note, body.approve)
+    return {"employee_code": t.employee_code, "month": t.month, "status": t.status.value}
+
+
+@app.post("/clients/{client_id}/time/{month}/approve")
+def approve_time(client_id: str, month: str, body: s.TimeApproveIn, actor: User = Depends(admin_user),
+                 ts: TimeService = Depends(get_time), auth: AuthService = Depends(get_auth)):
+    auth.check_client(actor, client_id)
+    return {"changed": ts.approve(actor, client_id, month, body.codes, body.approve)}

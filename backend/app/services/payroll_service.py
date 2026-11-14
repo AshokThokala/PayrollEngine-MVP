@@ -19,7 +19,7 @@ from .. import rule_schemas
 from ..domain import (AuditEvent, Client, EmployeeRecord, Filing, FilingStatus, StatutoryRule,
                       PayrollRun, RunStatus)
 from ..engine import PayInputs, RuleBook, SalaryStructure, compute_payslip
-from ..engine.money import D
+from ..engine.money import D, paise
 from ..engine.payroll import month_end
 from ..engine.tds import DECLARATION_KEYS
 from ..engine.wages import check_structure
@@ -299,8 +299,16 @@ class PayrollService:
             self._audit(user, "client.edit", client_id, "changed: " + ", ".join(changed))
         return client
 
+    @staticmethod
+    def _check_pay_type(pay_type: str, hourly_rate) -> None:
+        if pay_type not in ("salaried", "hourly"):
+            raise ServiceError("Choose salaried or hourly", field="pay_type")
+        if pay_type == "hourly" and D(hourly_rate or 0) <= 0:
+            raise ServiceError("Enter the hourly rate", field="hourly_rate")
+
     def update_employee(self, client_id: str, code: str, user: str, *, name: str | None = None,
-                        components: dict | None = None, flags: dict | None = None) -> list[str]:
+                        components: dict | None = None, flags: dict | None = None,
+                        pay_type: str | None = None, hourly_rate=None) -> list[str]:
         """Edit an employee's name, statutory settings and salary (a new salary version)."""
         record = self.repo.get_employee(client_id, code)
         e, changed = record.employee, []
@@ -313,11 +321,20 @@ class PayrollService:
             if key in self.EMPLOYEE_FLAGS and getattr(e, key) != value:
                 setattr(e, key, value)
                 changed.append(key)
+        if pay_type is not None or hourly_rate is not None:
+            new_type = pay_type or e.pay_type
+            new_rate = D(hourly_rate) if hourly_rate not in (None, "") else e.hourly_rate
+            self._check_pay_type(new_type, new_rate)
+            if (new_type, new_rate) != (e.pay_type, e.hourly_rate):
+                self._audit(user, "employee.pay_type", f"{client_id}/{code}",
+                            f"{e.pay_type} {e.hourly_rate} -> {new_type} {new_rate}")
+                e.pay_type, e.hourly_rate = new_type, new_rate
+                changed.append("pay type")
         warnings: list[str] = []
         if components is not None:
             structure = SalaryStructure(components)
             self._check_pay(client_id, structure.components)
-            if structure.total <= 0:
+            if structure.total <= 0 and e.pay_type != "hourly":
                 raise ServiceError("Enter at least one salary amount", field="components")
             if structure.components != record.structure.components:
                 old = record.structure.components
@@ -325,7 +342,8 @@ class PayrollService:
                 changed.append("salary")
                 self._audit(user, "employee.salary", f"{client_id}/{code}",
                             f"{_fmt(old)} -> {_fmt(structure.components)}")
-            warnings = self.structure_warnings(record.structure, self.clock().date())
+            if e.pay_type != "hourly":
+                warnings = self.structure_warnings(record.structure, self.clock().date())
         if changed:
             self.repo.save_employee(record)
             self._audit(user, "employee.edit", f"{client_id}/{code}", "changed: " + ", ".join(changed))
@@ -340,9 +358,14 @@ class PayrollService:
         else:
             raise ServiceError(f"Employee code '{record.code}' is already used in this client", field="code")
         record.employee.state = client.state
+        self._check_pay_type(record.employee.pay_type, record.employee.hourly_rate)
+        if record.employee.pay_type == "salaried" and record.structure.total <= 0:
+            raise ServiceError("Enter at least one salary amount", field="components")
         self._check_pay(record.client_id, record.structure.components)
         self.repo.save_employee(record)
         self._audit(user, "employee.create", f"{record.client_id}/{record.code}")
+        if record.employee.pay_type == "hourly":
+            return []
         return self.structure_warnings(record.structure, record.joined_on)
 
     def structure_warnings(self, structure: SalaryStructure, on: date) -> list[str]:
@@ -386,6 +409,8 @@ class PayrollService:
         for mi in inputs.values():
             self._check_pay(client_id, mi.other_earnings, variable=True)
         pay_labels = self._pay_labels(client_id)
+        from .timesheets import overtime_pay, summarize
+        sheets = {t.employee_code: t for t in self.repo.list_timesheets(client_id, end.replace(day=1))}
         rules = self.rules  # read once for the whole run
         days = calendar.monthrange(end.year, end.month)[1]
         # Only the locked runs we need: this financial year, plus last month for the
@@ -399,14 +424,32 @@ class PayrollService:
 
         for record in sorted(active, key=lambda r: r.code):
             mi = inputs.get(record.code, MonthInput())
-            paid = D(mi.paid_days) if mi.paid_days is not None else _default_paid_days(record, end)
+            hourly = record.employee.pay_type == "hourly"
+            sheet = sheets.get(record.code)
+            time = summarize(sheet, hourly)
+            structure, labels_for = record.structure, pay_labels
+            if hourly:
+                # Pay = regular hours x hourly rate, all of it wages; no proration by days.
+                rate, hours = record.employee.hourly_rate, time["regular_hours"]
+                structure = SalaryStructure({"basic": paise(rate * hours)} if hours > 0 else {})
+                labels_for = {**pay_labels, "basic": f"Wages ({hours.normalize():f} h × ₹{rate.normalize():f})"}
+                paid = D(days)
+                if hours <= 0:
+                    run.flags.append(f"{record.code}: hourly employee with no hours entered")
+            elif mi.paid_days is not None:
+                paid = D(mi.paid_days)
+            else:
+                paid = max(_default_paid_days(record, end) - time["lop_days"], D(0))
+            overtime = mi.overtime if mi.overtime else overtime_pay(record, time["ot_hours"])
+            if sheet is not None and sheet.status.value != "approved":
+                run.flags.append(f"{record.code}: time sheet not approved yet")
             year_to_date = ytd.get(record.code, {})
             others, labels = self._deductions_for(record, standing.get(record.code, []), paid, days, mi)
             slip = compute_payslip(
-                record.employee, record.structure,
+                record.employee, structure,
                 PayInputs(period=end, days_in_month=days, paid_days=paid,
-                          overtime=mi.overtime, other_earnings=mi.other_earnings,
-                          other_deductions=others, deduction_labels=labels, earning_labels=pay_labels,
+                          overtime=overtime, other_earnings=mi.other_earnings,
+                          other_deductions=others, deduction_labels=labels, earning_labels=labels_for,
                           fy_month_index=fy_month_index(end),
                           **year_to_date),
                 rules,

@@ -345,3 +345,21 @@ def test_pay_codes_api(client, ops):
     assert grid["employees"][0]["components"]["lta"] == 2000
     rows = client.get("/clients/acme/pay-codes", headers=ops).json()
     assert next(r for r in rows if r["code"] == "lta")["employees"] == 1
+
+
+def test_time_entry_api(client, ops):
+    client.post("/clients", headers=ops, json={"id": "acme", "legal_name": "Acme", "state": "TG"})
+    r = client.post("/clients/acme/employees", headers=ops, json={
+        "code": "H1", "name": "Hourly", "joined_on": "2026-04-01", "pay_type": "hourly"})
+    assert r.status_code == 409 and r.json()["errors"][0]["label"] == "Hourly rate"
+    r = client.post("/clients/acme/employees", headers=ops, json={
+        "code": "H1", "name": "Hourly", "joined_on": "2026-04-01", "pay_type": "hourly", "hourly_rate": 200})
+    assert r.status_code == 201 and r.json()["employee"]["pay_type"] == "hourly"
+    r = client.put("/clients/acme/employees/H1/time/2026-10", headers=ops,
+                   json={"days": {"1": {"hours": 8}, "2": {"hours": 8, "ot": 1}}})
+    assert r.status_code == 200 and r.json()["status"] == "draft"
+    view = client.get("/clients/acme/time/2026-10", headers=ops).json()
+    assert view["days_in_month"] == 31 and float(view["employees"][0]["hourly_pay"]) == 3200
+    assert client.post("/clients/acme/time/2026-10/approve", headers=ops, json={}).json() == {"changed": 1}
+    r = client.put("/clients/acme/employees/H1/time/2026-10", headers=ops, json={"days": {"40": {"hours": 1}}})
+    assert r.status_code == 422

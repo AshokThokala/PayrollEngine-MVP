@@ -35,7 +35,9 @@ class EmployeeIn(BaseModel):
     code: RequiredText
     name: RequiredText
     joined_on: date
-    components: dict[str, Amount] = Field(min_length=1)
+    components: dict[str, Amount] = {}
+    pay_type: str = "salaried"  # or "hourly"
+    hourly_rate: Decimal | None = None
     pf_member: bool = True
     eps_member: bool = True
     pf_on_full_wages: bool = False
@@ -52,6 +54,8 @@ class EmployeeOut(BaseModel):
     exited_on: date | None
     components: dict[str, Decimal]
     monthly_total: Decimal
+    pay_type: str = "salaried"
+    hourly_rate: Decimal = Decimal(0)
     flags: dict[str, bool | None] = {}
     tax: TaxProfile
 
@@ -232,6 +236,8 @@ class ClientUpdate(BaseModel):
 class EmployeeUpdate(BaseModel):
     name: str | None = None
     components: dict[str, Amount] | None = None
+    pay_type: str | None = None
+    hourly_rate: Decimal | None = None
     flags: dict[str, bool | None] | None = None
 
 
@@ -357,3 +363,14 @@ class ClientPayCodeIn(BaseModel):
 
 class EmployeePayIn(BaseModel):
     components: dict[str, str | float | int | None] = {}
+
+
+class TimesheetIn(BaseModel):
+    days: dict[str, dict] = {}
+    note: str = ""
+    approve: bool = False
+
+
+class TimeApproveIn(BaseModel):
+    codes: list[str] | None = None
+    approve: bool = True

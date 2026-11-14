@@ -43,6 +43,11 @@ class Employee:
     # Annual amounts declared for the old regime: rent_paid, sec_80c, sec_80ccd_1b,
     # sec_80d_self, sec_80d_parents, home_loan_interest
     tax_declarations: dict = field(default_factory=dict)
+    pay_type: str = "salaried"  # "salaried" (monthly salary structure) or "hourly" (hours x hourly rate)
+    hourly_rate: Decimal = ZERO  # rupees per hour, for hourly employees
+
+    def __post_init__(self):
+        self.hourly_rate = D(self.hourly_rate or 0)
 
 
 @dataclass
