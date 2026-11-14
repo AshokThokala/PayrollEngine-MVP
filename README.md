@@ -100,9 +100,10 @@ opens with a header: where you are (group › item › tab · client), what the 
 - **Users and access → + Add user**: add an admin with a temporary password. Platform admins can add platform admins
   or an admin for any client; client admins add admins for their own company. Employees join through *Employee
   onboarding* invites instead.
-- **Employee search** (top of every admin page; press `/` or Ctrl/⌘+K): finds employees by name or code, across every
-  client for platform admins (client admins: their own employees). Arrow keys and Enter pick a result, which switches
-  to the employee's client and opens their record. Clients are found with the client switcher.
+- **Search** lives with the client's data: on **Clients**, type to get suggestions (name, ID or PAN) and open a client;
+  its page lists all its employees with a search that suggests employees (name, code, designation, department) as
+  you type. **Employees** has the same employee search for the selected client. Matches are highlighted; arrow keys
+  and Enter pick one.
 - **Switch clients** with the client button at the top right (search by name or ID). Client admins see only their company.
 - **Click a client or employee row** to open its details and edit them; *+ Add client* / *+ Add employee* open the add form.
 - **View as employee** (on an employee's details) opens the employee portal exactly as that employee sees it,

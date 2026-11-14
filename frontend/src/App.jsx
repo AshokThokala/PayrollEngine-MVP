@@ -2,7 +2,6 @@ import { useCallback, useEffect, useState } from 'react'
 import { api, loadSession, saveSession, stashAdminSession, stashedAdminSession, whenLoggedOut } from './api.js'
 import ChangePassword from './components/ChangePassword.jsx'
 import ClientSwitcher from './components/ClientSwitcher.jsx'
-import GlobalSearch from './components/GlobalSearch.jsx'
 import AuthScreen from './pages/AuthScreen.jsx'
 import BillingPage from './pages/BillingPage.jsx'
 import ClientOnboardingPage from './pages/ClientOnboardingPage.jsx'
@@ -266,14 +265,7 @@ function AdminShell({ user, onLogout, onViewAs }) {
           </button>
           {menuHidden && <span className="logo topbar-logo" aria-hidden="true">C4U</span>}
           <h1 className="page-title">{current?.label || PAGES[tab]?.label}</h1>
-          <GlobalSearch
-            platform={platform}
-            onPickEmployee={(cid, code) => {
-              setClientId(cid)
-              setOpenEmployee({ clientId: cid, code, n: Date.now() })
-              setTab('employees')
-            }}
-          />
+          <span className="topbar-spacer" />
           {platform && clients.length > 0 ? (
             <ClientSwitcher clients={clients} value={clientId} onChange={setClientId} />
           ) : (
