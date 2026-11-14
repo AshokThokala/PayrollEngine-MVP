@@ -71,6 +71,7 @@ FIELD_LABELS = {
     "note": "Note",
     # deductions
     "type_code": "Code",
+    "enabled": "Used by this client",
     "category": "Type",
     "calc": "Calculated as",
     "payslip_label": "Name on payslip",

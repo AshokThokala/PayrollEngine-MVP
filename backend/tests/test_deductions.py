@@ -23,6 +23,9 @@ def svc(repo):
     s.add_employee(EmployeeRecord("acme", Employee(code="E1", name="Ravi"),
                                   SalaryStructure({"basic": 30000, "hra": 12000, "special": 8000}),
                                   date(2026, 4, 1)), "ops")
+    ds = DeductionService(s)
+    for code in ("vpf", "loan_emi", "canteen", "nps_employee"):
+        ds.set_client(OPS, "acme", code, {"enabled": True})
     return s
 
 
@@ -74,6 +77,7 @@ def test_one_off_amount_replaces_standing_and_cap(svc):
     ds = DeductionService(svc)
     ds.save_type(OPS, {"code": "gym", "name": "Gym", "category": "voluntary", "calc": "percent_gross",
                        "max_amount": "1000"})
+    ds.set_client(OPS, "acme", "gym", {"enabled": True})
     ds.save_for_employee(OPS, "acme", "E1", {"deduction_code": "gym", "value": "5", "start_month": "2026-10"})
     ds.save_for_employee(OPS, "acme", "E1", {"deduction_code": "canteen", "value": "600", "start_month": "2026-10"})
     from app.services.payroll_service import MonthInput
@@ -97,3 +101,36 @@ def test_employee_deduction_validation(svc):
     assert d.value == Decimal(10)  # default from the master
     ds.delete_for_employee(ACME, "acme", "E1", d.id)
     assert ds.for_employee("acme", "E1") == []
+
+
+def test_client_level_controls_employee_deductions(svc):
+    ds = DeductionService(svc)
+    rows = {r["type"].code: r for r in ds.client_settings("acme")}
+    assert rows["pf_employee"]["statutory"] and rows["pf_employee"]["enabled"]
+    assert rows["vpf"]["enabled"] and not rows["salary_advance"]["enabled"]
+    with pytest.raises(ServiceError) as e:  # not switched on for the client
+        ds.save_for_employee(ACME, "acme", "E1", {"deduction_code": "salary_advance", "value": "1000",
+                                                  "start_month": "2026-10"})
+    assert "Client deductions" in e.value.errors["deduction_code"]
+    with pytest.raises(ServiceError):
+        ds.set_client(OPS, "acme", "pf_employee", {"enabled": False})
+
+    # Client's own default, cap and payslip name.
+    ds.set_client(ACME, "acme", "salary_advance", {"enabled": True, "default_value": "2000", "max_amount": "1500",
+                                                   "payslip_label": "Advance (Acme)"})
+    d = ds.save_for_employee(ACME, "acme", "E1", {"deduction_code": "salary_advance", "start_month": "2026-10"})
+    assert d.value == Decimal(2000)
+    slip = svc.create_draft("acme", date(2026, 10, 1), user="ops").slips["E1"]
+    line = next(x for x in slip.deductions if x.code == "salary_advance")
+    assert line.amount == Decimal("1500.00") and line.label == "Advance (Acme)"
+    assert ds.client_settings("acme")[0]  # still listable
+    assert next(r for r in ds.client_settings("acme") if r["type"].code == "salary_advance")["employees"] == 1
+
+    # Switching it off for the client stops it in later runs.
+    ds.set_client(ACME, "acme", "salary_advance", {"enabled": False})
+    slip = svc.create_draft("acme", date(2026, 10, 1), user="ops").slips["E1"]
+    assert "salary_advance" not in {x.code for x in slip.deductions}
+    with pytest.raises(ServiceError) as e:
+        ds.set_client(ACME, "acme", "vpf", {"enabled": True, "default_value": "150"})
+    assert "percentage" in e.value.errors["default_value"]
+    assert len(ds.for_client("acme")) == 1

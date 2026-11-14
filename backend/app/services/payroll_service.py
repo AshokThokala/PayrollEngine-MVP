@@ -95,12 +95,13 @@ class PayrollService:
     # --- compliance rules ------------------------------------------------------
     def _standing_deductions(self, client_id: str, end: date) -> dict:
         """Standing employee deductions in force in the month ending `end`, by employee code."""
+        from .deductions import client_types
         month = end.replace(day=1)
-        types = {t.code: t for t in self.repo.list_deduction_types()}
+        types = client_types(self.repo, client_id)  # only deductions the client uses, with its cap and names
         out: dict[str, list] = {}
         for d in self.repo.list_employee_deductions(client_id):
             t = types.get(d.deduction_code)
-            if t is None or not t.active or d.start_month > month or (d.end_month and d.end_month < month):
+            if t is None or d.start_month > month or (d.end_month and d.end_month < month):
                 continue
             out.setdefault(d.employee_code, []).append((t, d))
         return out

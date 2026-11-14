@@ -326,3 +326,10 @@ class EmployeeDeductionIn(BaseModel):
     start_month: str = ""
     end_month: str | None = None
     note: str = ""
+
+
+class ClientDeductionIn(BaseModel):
+    enabled: bool = True
+    default_value: str | None = None
+    max_amount: str | None = None
+    payslip_label: str = ""

@@ -11,7 +11,7 @@ from datetime import date, datetime
 from decimal import Decimal
 from typing import Any, Iterator
 
-from ..domain import (AuditEvent, BillingPlan, Client, DeductionCalc, DeductionCategory, DeductionType,
+from ..domain import (AuditEvent, BillingPlan, Client, ClientDeduction, DeductionCalc, DeductionCategory, DeductionType,
                       EmployeeDeduction, EmployeeProfile, EmployeeRecord, Filing, FilingStatus,
                       Invite, Invoice, InvoiceStatus, PayrollRun, ProfileStatus, Role, RunStatus, RunSummary, StatutoryRule, User,
                       UserStatus)
@@ -465,6 +465,22 @@ class SqlRepository:
             else:
                 c.run(f"INSERT INTO deduction_types ({self._DT_COLS}) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                       t.code, *args)
+
+    def list_client_deductions(self, client_id: str) -> list[ClientDeduction]:
+        with self._tx() as c:
+            rows = c.all("SELECT client_id, deduction_code, enabled, default_value, max_amount, payslip_label"
+                         " FROM client_deductions WHERE client_id = ? ORDER BY deduction_code", client_id)
+        return [ClientDeduction(cid, code, bool(en), None if dv is None else _dec(dv),
+                                None if mx is None else _dec(mx), label or "")
+                for cid, code, en, dv, mx, label in rows]
+
+    def save_client_deduction(self, cd: ClientDeduction) -> None:
+        with self._tx() as c:
+            c.run("DELETE FROM client_deductions WHERE client_id = ? AND deduction_code = ?",
+                  cd.client_id, cd.deduction_code)
+            c.run("INSERT INTO client_deductions (client_id, deduction_code, enabled, default_value, max_amount,"
+                  " payslip_label) VALUES (?, ?, ?, ?, ?, ?)", cd.client_id, cd.deduction_code, cd.enabled,
+                  cd.default_value, cd.max_amount, cd.payslip_label)
 
     @staticmethod
     def _ededuct(row) -> EmployeeDeduction:

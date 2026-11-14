@@ -94,6 +94,10 @@ export const api = {
   deductionTypes: () => request('GET', '/deduction-types'),
   addDeductionType: (body) => request('POST', '/deduction-types', body),
   editDeductionType: (code, body) => request('PUT', `/deduction-types/${enc(code)}`, body),
+  clientDeductions: (clientId) => request('GET', `/clients/${enc(clientId)}/deductions`),
+  setClientDeduction: (clientId, code, body) => request('PUT', `/clients/${enc(clientId)}/deductions/${enc(code)}`, body),
+  availableDeductions: (clientId) => request('GET', `/clients/${enc(clientId)}/deductions/available`),
+  allEmployeeDeductions: (clientId) => request('GET', `/clients/${enc(clientId)}/employee-deductions`),
   employeeDeductions: (clientId, code) => request('GET', `/clients/${enc(clientId)}/employees/${enc(code)}/deductions`),
   addEmployeeDeduction: (clientId, code, body) =>
     request('POST', `/clients/${enc(clientId)}/employees/${enc(code)}/deductions`, body),

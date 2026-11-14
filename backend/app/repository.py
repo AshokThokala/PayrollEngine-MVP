@@ -9,7 +9,7 @@ from datetime import date
 from decimal import Decimal
 from typing import Protocol
 
-from .domain import (AuditEvent, BillingPlan, Client, DeductionType, EmployeeDeduction, EmployeeProfile, EmployeeRecord, Filing, Invite, Invoice,
+from .domain import (AuditEvent, BillingPlan, Client, ClientDeduction, DeductionType, EmployeeDeduction, EmployeeProfile, EmployeeRecord, Filing, Invite, Invoice,
                      PayrollRun, RunStatus, RunSummary, StatutoryRule, User)
 from .engine.models import Payslip
 
@@ -64,6 +64,8 @@ class Repository(Protocol):
     def list_deduction_types(self) -> list[DeductionType]: ...
     def get_deduction_type(self, code: str) -> DeductionType | None: ...
     def save_deduction_type(self, t: DeductionType) -> None: ...
+    def list_client_deductions(self, client_id: str) -> list[ClientDeduction]: ...
+    def save_client_deduction(self, cd: ClientDeduction) -> None: ...
     def list_employee_deductions(self, client_id: str, employee_code: str | None = None) -> list[EmployeeDeduction]: ...
     def get_employee_deduction(self, deduction_id: str) -> EmployeeDeduction: ...
     def save_employee_deduction(self, d: EmployeeDeduction) -> None: ...
@@ -85,6 +87,7 @@ class InMemoryRepository:
         self._invites: dict[str, Invite] = {}
         self._deduction_types: dict[str, DeductionType] = {}
         self._employee_deductions: dict[str, EmployeeDeduction] = {}
+        self._client_deductions: dict[tuple[str, str], ClientDeduction] = {}
         self._profiles: dict[tuple[str, str], EmployeeProfile] = {}
         self._plans: dict[str, BillingPlan] = {}
         self._invoices: dict[str, Invoice] = {}
@@ -204,6 +207,15 @@ class InMemoryRepository:
 
     def save_deduction_type(self, t: DeductionType) -> None:
         self._deduction_types[t.code] = t
+
+    def list_client_deductions(self, client_id: str) -> list[ClientDeduction]:
+        return [cd for (cid, _), cd in sorted(self._client_deductions.items()) if cid == client_id]
+
+    def save_client_deduction(self, cd: ClientDeduction) -> None:
+        self.get_client(cd.client_id)
+        if cd.deduction_code not in self._deduction_types:
+            raise ValueError(f"Unknown deduction type {cd.deduction_code!r}")
+        self._client_deductions[(cd.client_id, cd.deduction_code)] = cd
 
     def list_employee_deductions(self, client_id: str, employee_code: str | None = None) -> list[EmployeeDeduction]:
         rows = [d for d in self._employee_deductions.values() if d.client_id == client_id
