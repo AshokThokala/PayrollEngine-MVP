@@ -152,6 +152,7 @@ function AdminShell({ user, onLogout, onViewAs }) {
   const [tab, setTab] = useState(platform ? 'clients' : 'employees')
   const [error, setError] = useState('')
   const [openEmployee, setOpenEmployee] = useState(null) // from search: { code, n }
+  const [openClient, setOpenClient] = useState(null) // { id, section, n }: open a client record on a tab
   const [ruleCategory, setRuleCategory] = useState(null) // Tax rules → open Compliance rules on a category
 
   const loadClients = useCallback(async () => {
@@ -313,6 +314,7 @@ function AdminShell({ user, onLogout, onViewAs }) {
           {tab === 'clients' && platform && (
             <ClientsPage
               clients={clients}
+              openRequest={openClient}
               onOpenEmployee={(cid, code) => {
                 setClientId(cid)
                 setOpenEmployee({ clientId: cid, code, n: Date.now() })
@@ -330,7 +332,9 @@ function AdminShell({ user, onLogout, onViewAs }) {
             />
           )}
           {tab === 'employees' && client && (
-            <EmployeesPage client={client} openRequest={openEmployee} onViewAs={(code) => onViewAs(client.id, code).catch((e) => setError(e.message))} />
+            <EmployeesPage client={client} openRequest={openEmployee}
+              onOpenClient={platform ? (id) => { setOpenClient({ id, section: 'employees', n: Date.now() }); setTab('clients') } : undefined}
+              onViewAs={(code) => onViewAs(client.id, code).catch((e) => setError(e.message))} />
           )}
           {tab === 'time' && client && <TimeEntryPage client={client} onGo={setTab} />}
           {tab === 'runs' && client && <RunsPage client={client} user={user.email} />}

@@ -604,3 +604,15 @@ dl.details-grid .fact dd { margin: 2px 0 0; }
 .topbar-spacer { flex: 1; }
 mark { background: var(--saffron-soft); color: inherit; padding: 0 1px; border-radius: 3px; font-weight: 700; }
 .row.filters .picker { flex: 1; min-width: 240px; }
+
+/* --- record tiles (client and employee): one size, tabs, prev/next ------------------------------ */
+[hidden] { display: none !important; }
+.record-tile { min-height: 560px; width: 100%; }
+.record-nav { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: -4px 0 12px;
+  padding-bottom: 10px; border-bottom: 1px dashed var(--line); }
+.record-pager { display: inline-flex; align-items: center; gap: 8px; margin-left: auto; }
+.record-pager button { padding: 4px 10px; font-size: 0.82rem; }
+.record-tabs { margin: 14px 0 16px; }
+.emp-avatar.client { background: linear-gradient(135deg, var(--saffron), #f0c14b); color: var(--navy); }
+.record-tile > .form.section:first-of-type, .record-tile > div > .form.section:first-child { border-top: 0; padding-top: 0; margin-top: 0; }
+.empty-state.record-tile { display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; }

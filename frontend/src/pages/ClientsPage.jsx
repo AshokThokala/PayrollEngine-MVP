@@ -1,4 +1,4 @@
-import { cloneElement, useEffect, useState } from 'react'
+import { cloneElement, useEffect, useRef, useState } from 'react'
 import ClientEmployees from '../components/ClientEmployees.jsx'
 import ClientLocations from '../components/ClientLocations.jsx'
 import PickerSearch, { Highlight } from '../components/PickerSearch.jsx'
@@ -39,9 +39,10 @@ function Field({ name, label, error, children }) {
 
 const EMPTY = { id: '', legal_name: '', state: 'TG', pan: '', tan: '', pf_code: '', esi_code: '', pt_registration: '' }
 
-export default function ClientsPage({ clients, onCreated, onOpen, onUpdated, onOpenEmployee }) {
+export default function ClientsPage({ clients, onCreated, onOpen, onUpdated, onOpenEmployee, openRequest }) {
   const [mode, setMode] = useState('none') // none | add | edit
   const [selectedId, setSelectedId] = useState(null)
+  const [section, setSection] = useState('details') // tab of the open client record
   const [form, setForm] = useState(EMPTY)
   const [message, setMessage] = useState(null)
   const [busy, setBusy] = useState(false)
@@ -67,12 +68,24 @@ export default function ClientsPage({ clients, onCreated, onOpen, onUpdated, onO
   }
 
   const select = (c) => {
+    if (!c) return
     setMode('edit')
     setSelectedId(c.id)
     setForm({ ...EMPTY, ...c })
     setFieldErrors({})
     setMessage(null)
   }
+
+  const handled = useRef(null)
+  useEffect(() => {
+    if (!openRequest || handled.current === openRequest.n) return
+    const c = clients.find((x) => x.id === openRequest.id)
+    if (!c) return
+    handled.current = openRequest.n
+    select(c)
+    setSection(openRequest.section || 'details')
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [openRequest, clients])
 
   const submit = async (e) => {
     e.preventDefault()
@@ -101,6 +114,7 @@ export default function ClientsPage({ clients, onCreated, onOpen, onUpdated, onO
   const editing = mode === 'edit'
 
   const current = clients.find((c) => c.id === selectedId)
+  const cpos = clients.findIndex((c) => c.id === selectedId)
 
   return (
     <div className="stack">
@@ -120,19 +134,49 @@ export default function ClientsPage({ clients, onCreated, onOpen, onUpdated, onO
         <button className="primary" onClick={startAdd}>+ Add client</button>
       </section>
 
-      <div className={editing ? 'grid client-grid' : 'stack'}>
+      <div className="stack">
       {mode === 'none' ? (
-        <section className="card empty-state">
+        <section className="card empty-state record-tile">
           <h2>Find a client</h2>
           <p className="muted">{clients.length ? 'Search above to open a client: its details, locations and all its employees.' : 'No clients yet. Add your first client firm.'}</p>
         </section>
       ) : (
-        <section className="card allow-overflow">
+        <section className="card allow-overflow record-tile">
+          {editing && (
+            <div className="record-nav">
+              <span className="muted small">Client</span>
+              <span className="record-pager">
+                <button type="button" disabled={cpos <= 0} onClick={() => select(clients[cpos - 1])} aria-label="Previous client">‹ Prev</button>
+                <span className="muted small">{cpos + 1} of {clients.length}</span>
+                <button type="button" disabled={cpos >= clients.length - 1} onClick={() => select(clients[cpos + 1])} aria-label="Next client">Next ›</button>
+              </span>
+            </div>
+          )}
           <div className="run-head">
-            <h2>{editing ? form.legal_name || selectedId : 'Add client'}</h2>
-            {editing && <button onClick={() => onOpen(selectedId)}>Open employees →</button>}
+            <div className="emp-head">
+              <span className="emp-avatar client" aria-hidden="true">{(form.legal_name || '?').slice(0, 1).toUpperCase()}</span>
+              <div>
+                <h2>{editing ? form.legal_name || selectedId : 'Add client'}</h2>
+                {editing && (
+                  <div className="chips">
+                    <span className="chip">{selectedId}</span>
+                    <span className="chip">{states.find((x) => x.code === form.state)?.name || form.state}</span>
+                    {form.pan && <span className="chip">PAN {form.pan}</span>}
+                  </div>
+                )}
+              </div>
+            </div>
+            <button type="button" onClick={() => { setMode('none'); setSelectedId(null) }}>Close</button>
           </div>
-          <form onSubmit={submit} className="form">
+          {editing && (
+            <div className="page-tabs record-tabs" role="tablist" aria-label="Client record">
+              {[['details', 'Details'], ['locations', 'Locations'], ['employees', 'Employees']].map(([k, label]) => (
+                <button key={k} type="button" role="tab" aria-selected={section === k} className={section === k ? 'active' : ''}
+                  onClick={() => setSection(k)}>{label}</button>
+              ))}
+            </div>
+          )}
+          <form onSubmit={submit} className="form" hidden={editing && section !== 'details'}>
             <div className="row">
               <Field name="id" error={fieldErrors.id} label="Client ID">
                 <input required pattern="[a-z0-9-]{2,40}" value={form.id} onChange={set('id')} disabled={editing} />
@@ -165,10 +209,12 @@ export default function ClientsPage({ clients, onCreated, onOpen, onUpdated, onO
               <button type="button" onClick={() => { setMode('none'); setSelectedId(null) }}>Close</button>
             </div>
           </form>
-          {editing && <ClientLocations clientId={selectedId} states={states} />}
+          {editing && section === 'locations' && <ClientLocations clientId={selectedId} states={states} />}
+          {editing && section === 'employees' && current && (
+            <ClientEmployees client={current} onOpenEmployee={onOpenEmployee} onAddEmployee={() => onOpen(current.id)} embedded />
+          )}
         </section>
       )}
-      {editing && current && <ClientEmployees client={current} onOpenEmployee={onOpenEmployee} onAddEmployee={() => onOpen(current.id)} />}
       </div>
     </div>
   )
