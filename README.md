@@ -52,6 +52,14 @@ Master lists, Clients and Compliance rules are for the ClearPay4U team only. Eac
 Click a group heading to fold it away, or « to shrink the menu to icons (») - the browser remembers both. Every page
 opens with a header: where you are (group › item › tab · client), what the page is for, then its tabs.
 
+- **Employee details** (Employees → open an employee): a header with initials, designation, department, pay type,
+  joining date, gender and age, then *Employee details* in tabs - **Personal** (date of birth, gender, marital status,
+  father's or spouse's name and relation - needed for EPFO/ESIC registration - nationality, blood group, disability),
+  **Contact** (mobile, personal email, current and permanent address, emergency contact and relation), **Job**
+  (designation, department, employment type, work location, reporting manager, work email) and **Statutory and bank**
+  (PAN, UAN, ESI IP, bank, IFSC, account). Each tab shows how many fields are filled. It is the same record the employee
+  fills in during onboarding: they add the personal fields; job fields are the employer's only. The Employees list now
+  shows designation and department.
 - **Time entry** (salaried and hourly): pick a month, click an employee and fill in a calendar.
   - *Salaried*: a status per day - present, absent (A), half day (HD), paid leave (L), holiday (H), weekly off (WO) -
     and overtime hours. Absent days and half of each half day are loss of pay; no time sheet = full month paid.

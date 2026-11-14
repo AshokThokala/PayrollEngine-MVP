@@ -179,3 +179,27 @@ def test_smtp_mailer_sends(monkeypatch):
     sent.clear()
     plain.send(Email("a@b.in", "Hi", "t"))
     assert sent["addr"] == ("mailpit", 1025) and "tls" not in sent and "login" not in sent
+
+
+def test_admin_edits_demographics_and_job(world, repo):
+    eo, admin, outsider = world
+    out = eo.save_for_admin(admin, "acme", "E1", {
+        "gender": "female", "marital_status": "married", "father_or_spouse_name": "Suresh Rao",
+        "father_or_spouse_relation": "spouse", "blood_group": "O+", "personal_email": "Priya@Mail.com",
+        "department": "Finance", "designation": "Accountant", "employment_type": "permanent",
+        "work_email": "priya@acme.in", "pan": "abcde1234f"})
+    assert out["designation"] == "Accountant" and out["personal_email"] == "priya@mail.com" and out["pan"] == "ABCDE1234F"
+    assert repo.get_profile("acme", "E1").status == ProfileStatus.DRAFT  # status unchanged
+    with pytest.raises(ServiceError) as e:
+        eo.save_for_admin(admin, "acme", "E1", {"gender": "x", "blood_group": "Z", "work_email": "nope",
+                                                "father_or_spouse_relation": ""})
+    assert {"gender", "blood_group", "work_email", "father_or_spouse_relation"} <= set(e.value.errors)
+    from app.services.auth_service import AccessDenied
+    with pytest.raises(AccessDenied):
+        eo.save_for_admin(outsider, "acme", "E1", {"designation": "CEO"})
+
+    # The employee can't change employer-only fields, and keeps the employer's values.
+    _, token, _ = eo.invite(admin, "acme", "E1", "ravi@acme.in")
+    ravi = eo.accept(token, "Ravi", "Payroll123")
+    mine = eo.save_my_profile(ravi, {"designation": "CEO", "blood_group": "A+"})
+    assert mine["designation"] == "Accountant" and mine["blood_group"] == "A+"

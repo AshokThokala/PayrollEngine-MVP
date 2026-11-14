@@ -54,6 +54,8 @@ class EmployeeOut(BaseModel):
     exited_on: date | None
     components: dict[str, Decimal]
     monthly_total: Decimal
+    designation: str = ""
+    department: str = ""
     pay_type: str = "salaried"
     hourly_rate: Decimal = Decimal(0)
     flags: dict[str, bool | None] = {}
@@ -286,6 +288,22 @@ class ProfileIn(BaseModel):
     ifsc: str = ""
     pan: str = ""
     account_number: str = ""
+    gender: str = ""
+    marital_status: str = ""
+    father_or_spouse_name: str = ""
+    father_or_spouse_relation: str = ""
+    nationality: str = ""
+    blood_group: str = ""
+    personal_email: str = ""
+    permanent_address: str = ""
+    emergency_relation: str = ""
+    differently_abled: str = ""
+    department: str = ""
+    designation: str = ""
+    work_location: str = ""
+    employment_type: str = ""
+    reporting_manager: str = ""
+    work_email: str = ""
     submit: bool = False
 
 class TaxCalcIn(BaseModel):
