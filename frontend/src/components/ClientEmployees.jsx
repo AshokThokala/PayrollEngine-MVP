@@ -17,7 +17,7 @@ export function EmployeeSuggestion({ e, q }) {
 }
 
 // All employees of one client, shown when the client is opened. Click one to open their record.
-export default function ClientEmployees({ client, onOpenEmployee, onAddEmployee }) {
+export default function ClientEmployees({ client, onOpenEmployee, onAddEmployee, embedded }) {
   const [list, setList] = useState(null)
   const [showLeft, setShowLeft] = useState(false)
   const [error, setError] = useState('')
@@ -28,15 +28,16 @@ export default function ClientEmployees({ client, onOpenEmployee, onAddEmployee 
     api.listEmployees(client.id).then(setList).catch((e) => setError(e.message))
   }, [client.id])
 
-  if (error) return <section className="card"><div className="banner error">{error}</div></section>
-  if (!list) return <section className="card"><p className="muted">Loading employees…</p></section>
+  const Box = embedded ? 'div' : 'section'
+  if (error) return <Box className={embedded ? 'section' : 'card'}><div className="banner error">{error}</div></Box>
+  if (!list) return <Box className={embedded ? 'section' : 'card'}><p className="muted">Loading employees…</p></Box>
 
   const active = list.filter((e) => !e.exited_on)
   const shown = list.filter((e) => showLeft || !e.exited_on)
   const payroll = active.reduce((t, e) => t + Number(e.monthly_total || 0), 0)
 
   return (
-    <section className="card allow-overflow">
+    <Box className={embedded ? 'section' : 'card allow-overflow'}>
       <div className="run-head">
         <h2>Employees <span className="tag">{active.length} active</span></h2>
         <button onClick={onAddEmployee}>+ Add employee</button>
@@ -76,6 +77,6 @@ export default function ClientEmployees({ client, onOpenEmployee, onAddEmployee 
           {shown.length === 0 && <p className="muted small">Everyone here has left; tick "Show employees who left".</p>}
         </>
       )}
-    </section>
+    </Box>
   )
 }

@@ -47,7 +47,9 @@ function FieldError({ label, error }) {
   return error ? <span className="field-error">{label}: {error}</span> : null
 }
 
-export default function EmployeesPage({ client, onViewAs, openRequest }) {
+const EMP_SECTIONS = [['profile', 'Personal and job'], ['pay', 'Pay and statutory'], ['tax', 'Income tax'], ['deductions', 'Deductions'], ['exit', 'Exit']]
+
+export default function EmployeesPage({ client, onViewAs, openRequest, onOpenClient }) {
   const [employees, setEmployees] = useState([])
   const [mode, setMode] = useState('none') // none | add | edit
   const [selectedCode, setSelectedCode] = useState(null)
@@ -67,6 +69,9 @@ export default function EmployeesPage({ client, onViewAs, openRequest }) {
     api.clientLocations(client.id).then(setLocations).catch(() => setLocations([]))
   }, [client.id])
   const locationName = (id) => (locations.find((l) => l.id === id) || (!id && locations.find((l) => l.head_office)))?.name
+  const [section, setSection] = useState('profile') // tab of the open employee record
+  const ordered = employees.filter((e) => !e.exited_on || e.code === selectedCode)
+  const pos = ordered.findIndex((e) => e.code === selectedCode)
   const [profileFacts, setProfileFacts] = useState({}) // gender and date of birth for the header, from EmployeeDetails
   useEffect(() => { setProfileFacts({}) }, [selectedCode])
   const [payCodes, setPayCodes] = useState([])
@@ -310,14 +315,14 @@ export default function EmployeesPage({ client, onViewAs, openRequest }) {
       </section>
 
       {mode === 'none' && (
-        <section className="card empty-state">
+        <section className="card empty-state record-tile">
           <h2>Find an employee</h2>
           <p className="muted">{employees.length ? 'Search above to open an employee: details, salary, statutory settings, tax and deductions. To see everyone, open the client on the Clients page.' : 'No employees yet. Add the first one.'}</p>
         </section>
       )}
 
       {mode === 'add' && (
-        <section className="card allow-overflow">
+        <section className="card allow-overflow record-tile">
           <h2>Add employee</h2>
           {message && <div className={`banner ${message.kind}`}>{message.text}</div>}
           <form onSubmit={add} className="form">
@@ -344,7 +349,17 @@ export default function EmployeesPage({ client, onViewAs, openRequest }) {
       )}
 
       {mode === 'edit' && selected && (
-        <section className="card allow-overflow">
+        <section className="card allow-overflow record-tile">
+          <div className="record-nav">
+            {onOpenClient && (
+              <button type="button" className="link" onClick={() => onOpenClient(client.id)}>‹ {client.legal_name} · all employees</button>
+            )}
+            <span className="record-pager">
+              <button type="button" disabled={pos <= 0} onClick={() => select(ordered[pos - 1])} aria-label="Previous employee">‹ Prev</button>
+              <span className="muted small">{pos + 1} of {ordered.length}</span>
+              <button type="button" disabled={pos >= ordered.length - 1} onClick={() => select(ordered[pos + 1])} aria-label="Next employee">Next ›</button>
+            </span>
+          </div>
           <div className="run-head">
             <div>
               <div className="emp-head">
@@ -373,35 +388,43 @@ export default function EmployeesPage({ client, onViewAs, openRequest }) {
               <button onClick={() => { setMode('none'); setSelectedCode(null) }}>Close</button>
             </div>
           </div>
+          <div className="page-tabs record-tabs" role="tablist" aria-label="Employee record">
+            {EMP_SECTIONS.filter(([k]) => k !== 'exit' || !selected.exited_on).map(([k, label]) => (
+              <button key={k} type="button" role="tab" aria-selected={section === k} className={section === k ? 'active' : ''}
+                onClick={() => setSection(k)}>{label}</button>
+            ))}
+          </div>
           {message && <div className={`banner ${message.kind}`}>{message.text}</div>}
 
+          <div hidden={section !== 'profile'}>
           <EmployeeDetails client={client} employee={selected} onSaved={(p) => {
             setProfileFacts({ gender: p.gender ? p.gender[0].toUpperCase() + p.gender.slice(1).replace(/_/g, ' ') : '', date_of_birth: p.date_of_birth })
             setEmployees((list) => list.map((e) => (e.code === selected.code ? { ...e, designation: p.designation, department: p.department } : e)))
           }} />
+          </div>
 
-          <form onSubmit={saveDetails} className="form section">
+          <form onSubmit={saveDetails} className="form section" hidden={section !== 'pay'}>
             <h3>Pay and statutory settings</h3>
             <label>Name<input required value={form.name} onChange={set('name')} {...invalid('name')} />
               <FieldError label="Name" error={fieldErrors.name} /></label>
             {salaryFields}
             {statutoryFields}
             <div className="inline">
-              <button className="primary" disabled={busy || total <= 0}>Save details</button>
+              <button className="primary" disabled={busy || (total <= 0 && form.pay_type !== 'hourly')}>Save details</button>
               <span className="muted small">A salary change is kept as a new version.</span>
             </div>
           </form>
 
-          <form onSubmit={saveTax} className="form section">
+          <form onSubmit={saveTax} className="form section" hidden={section !== 'tax'}>
             <h3>Income tax</h3>
             <TaxFields value={tax} onChange={setTax} errors={taxErrors} />
             <div><button className="primary" disabled={busy}>Save tax details</button></div>
           </form>
 
-          <EmployeeDeductions client={client} employee={selected} />
+          <div hidden={section !== 'deductions'}><EmployeeDeductions client={client} employee={selected} /></div>
 
           {!selected.exited_on && (
-            <div className="form section">
+            <div className="form section" hidden={section !== 'exit'}>
               <h3>Exit</h3>
               <div className="inline">
                 <input type="date" value={exitOn} onChange={(e) => setExitOn(e.target.value)} aria-label="Exit date"
