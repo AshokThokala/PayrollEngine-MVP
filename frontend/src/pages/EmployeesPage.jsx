@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import EmployeeDeductions from '../components/EmployeeDeductions.jsx'
+import EmployeeDetails, { ageFrom } from '../components/EmployeeDetails.jsx'
 import { api, money, today } from '../api.js'
 import InfoTip from '../components/InfoTip.jsx'
 import TaxFields, { EMPTY_TAX, taxFromEmployee } from '../components/TaxFields.jsx'
@@ -58,6 +59,8 @@ export default function EmployeesPage({ client, onViewAs, openRequest }) {
   const [loadedFor, setLoadedFor] = useState(null)
   const handled = useRef(null)
   // Salary fields = the fixed pay codes this client uses (Client pay codes), with their payslip names.
+  const [profileFacts, setProfileFacts] = useState({}) // gender and date of birth for the header, from EmployeeDetails
+  useEffect(() => { setProfileFacts({}) }, [selectedCode])
   const [payCodes, setPayCodes] = useState([])
   useEffect(() => {
     api.availablePayCodes(client.id).then((list) => setPayCodes(list.filter((p) => p.kind === 'fixed'))).catch(() => setPayCodes([]))
@@ -285,14 +288,14 @@ export default function EmployeesPage({ client, onViewAs, openRequest }) {
         ) : (
           <div className="table-wrap">
             <table className="clickable">
-              <thead><tr><th>Name</th><th>Code</th><th className="num">Monthly pay</th><th>Status</th></tr></thead>
+              <thead><tr><th>Name</th><th>Designation</th><th className="num">Monthly pay</th><th>Status</th></tr></thead>
               <tbody>
                 {shown.map((emp) => (
                   <tr key={emp.code} tabIndex={0}
                     className={`${emp.exited_on ? 'dim' : ''} ${selectedCode === emp.code ? 'selected' : ''}`}
                     onClick={() => select(emp)} onKeyDown={(e) => { if (e.key === 'Enter') select(emp) }}>
-                    <td><strong>{emp.name}</strong></td>
-                    <td>{emp.code}</td>
+                    <td><strong>{emp.name}</strong> <span className="muted small">{emp.code}</span></td>
+                    <td className="small">{emp.designation || <span className="muted">—</span>}{emp.department ? <span className="muted"> · {emp.department}</span> : ''}</td>
                     <td className="num">{emp.pay_type === 'hourly' ? `₹${Number(emp.hourly_rate)}/h` : money(emp.monthly_total)}</td>
                     <td>{emp.exited_on ? <span className="tag">Left {emp.exited_on}</span> : <span className="tag locked">Active</span>}</td>
                   </tr>
@@ -342,8 +345,23 @@ export default function EmployeesPage({ client, onViewAs, openRequest }) {
         <section className="card allow-overflow">
           <div className="run-head">
             <div>
-              <h2>{selected.name}</h2>
-              <p className="muted small">{selected.code} · joined {selected.joined_on}{selected.exited_on ? ` · left ${selected.exited_on}` : ''}</p>
+              <div className="emp-head">
+                <span className="emp-avatar" aria-hidden="true">{selected.name.split(' ').map((w) => w[0]).slice(0, 2).join('').toUpperCase()}</span>
+                <div>
+                  <h2>{selected.name}</h2>
+                  <p className="muted small">
+                    {[selected.designation, selected.department].filter(Boolean).join(' · ') || 'No designation yet'}
+                  </p>
+                  <div className="chips">
+                    <span className="chip">{selected.code}</span>
+                    <span className="chip">{selected.pay_type === 'hourly' ? 'Hourly' : 'Salaried'}</span>
+                    <span className="chip">Joined {selected.joined_on}</span>
+                    {profileFacts.gender && <span className="chip">{profileFacts.gender}</span>}
+                    {ageFrom(profileFacts.date_of_birth) !== null && <span className="chip">{ageFrom(profileFacts.date_of_birth)} yrs</span>}
+                    {selected.exited_on && <span className="chip warn">Left {selected.exited_on}</span>}
+                  </div>
+                </div>
+              </div>
             </div>
             <div className="actions">
               <button onClick={() => onViewAs(selected.code)} title="See the employee portal exactly as this employee does (read-only)">
@@ -354,7 +372,13 @@ export default function EmployeesPage({ client, onViewAs, openRequest }) {
           </div>
           {message && <div className={`banner ${message.kind}`}>{message.text}</div>}
 
-          <form onSubmit={saveDetails} className="form">
+          <EmployeeDetails client={client} employee={selected} onSaved={(p) => {
+            setProfileFacts({ gender: p.gender ? p.gender[0].toUpperCase() + p.gender.slice(1).replace(/_/g, ' ') : '', date_of_birth: p.date_of_birth })
+            setEmployees((list) => list.map((e) => (e.code === selected.code ? { ...e, designation: p.designation, department: p.department } : e)))
+          }} />
+
+          <form onSubmit={saveDetails} className="form section">
+            <h3>Pay and statutory settings</h3>
             <label>Name<input required value={form.name} onChange={set('name')} {...invalid('name')} />
               <FieldError label="Name" error={fieldErrors.name} /></label>
             {salaryFields}

@@ -138,6 +138,7 @@ export const api = {
   acceptInvite: (token, body) => request('POST', `/invite/${enc(token)}/accept`, body),
   employeeOnboarding: (clientId) => request('GET', `/clients/${enc(clientId)}/employee-onboarding`),
   employeeProfile: (clientId, code) => request('GET', `/clients/${enc(clientId)}/employees/${enc(code)}/profile`),
+  saveEmployeeProfile: (clientId, code, body) => request('PUT', `/clients/${enc(clientId)}/employees/${enc(code)}/profile`, body),
   reviewProfile: (clientId, code, decision, note = '') =>
     request('POST', `/clients/${enc(clientId)}/employees/${enc(code)}/profile/${decision}`, { note }),
   myOnboarding: () => request('GET', '/me/onboarding'),

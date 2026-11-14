@@ -145,9 +145,11 @@ async def _invalid(_: Request, exc: RequestValidationError):
     return JSONResponse(status_code=422, content=errors.from_validation(exc.errors()))
 
 
-def _employee_out(r: EmployeeRecord) -> s.EmployeeOut:
+def _employee_out(r: EmployeeRecord, profile=None) -> s.EmployeeOut:
     e = r.employee
+    details = profile.details if profile else {}
     return s.EmployeeOut(code=r.code, name=e.name, joined_on=r.joined_on,
+                         designation=details.get("designation", ""), department=details.get("department", ""),
                          exited_on=r.exited_on, components=r.structure.components,
                          monthly_total=r.structure.total, pay_type=e.pay_type, hourly_rate=e.hourly_rate,
                          flags={k: getattr(e, k) for k in PayrollService.EMPLOYEE_FLAGS},
@@ -240,7 +242,8 @@ def list_employees(client_id: str, actor: User = Depends(admin_user),
                    svc: PayrollService = Depends(get_service), auth: AuthService = Depends(get_auth)):
     auth.check_client(actor, client_id)
     svc.repo.get_client(client_id)
-    return [_employee_out(r) for r in svc.repo.list_employees(client_id)]
+    profiles = {p.employee_code: p for p in svc.repo.list_profiles(client_id)}  # one query, not one per employee
+    return [_employee_out(r, profiles.get(r.code)) for r in svc.repo.list_employees(client_id)]
 
 
 @app.put("/clients/{client_id}/employees/{code}", response_model=s.EmployeeCreated)
@@ -656,6 +659,15 @@ def employee_profile(client_id: str, code: str, actor: User = Depends(admin_user
     return eo.profile_for_admin(actor, client_id, code)
 
 
+@app.put("/clients/{client_id}/employees/{code}/profile")
+def edit_employee_profile(client_id: str, code: str, body: s.ProfileIn, actor: User = Depends(admin_user),
+                          eo: EmployeeOnboardingService = Depends(get_employee_onboarding)):
+    """The employer edits personal, job, statutory and bank details (only the fields sent)."""
+    data = body.model_dump(exclude_unset=True)
+    data.pop("submit", None)
+    return eo.save_for_admin(actor, client_id, code, data)
+
+
 @app.post("/clients/{client_id}/employees/{code}/profile/{decision}")
 def review_profile(client_id: str, code: str, decision: str, body: s.ReviewIn | None = None,
                    actor: User = Depends(admin_user),
@@ -674,8 +686,8 @@ def my_onboarding(user: User = Depends(employee_user),
 @app.put("/me/onboarding")
 def save_my_onboarding(body: s.ProfileIn, user: User = Depends(employee_user),
                        eo: EmployeeOnboardingService = Depends(get_employee_onboarding)):
-    data = body.model_dump()
-    submit = data.pop("submit")
+    data = body.model_dump(exclude_unset=True)  # fields not sent are left as they are
+    submit = data.pop("submit", False)
     return eo.save_my_profile(user, data, submit=submit)
 
 # --- income tax rules page -------------------------------------------------------------------

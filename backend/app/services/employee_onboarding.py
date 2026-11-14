@@ -36,12 +36,33 @@ UAN = re.compile(r"^[0-9]{12}$")
 ESI_IP = re.compile(r"^[0-9]{10}$")
 PINCODE = re.compile(r"^[1-9][0-9]{5}$")
 
+EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+
 # Plain (not encrypted) fields and whether they are needed to submit.
 DETAIL_FIELDS = {
+    # contact
     "phone": True, "date_of_birth": True, "address": True, "city": True, "pincode": True,
-    "emergency_name": True, "emergency_phone": True, "uan": False, "esi_ip": False,
-    "bank_name": True, "ifsc": True,
+    "emergency_name": True, "emergency_phone": True,
+    # statutory and bank
+    "uan": False, "esi_ip": False, "bank_name": True, "ifsc": True,
+    # demographics (father's/spouse's name and gender are asked for by EPFO and ESIC registration)
+    "gender": False, "marital_status": False, "father_or_spouse_name": False, "father_or_spouse_relation": False,
+    "nationality": False, "blood_group": False, "personal_email": False, "permanent_address": False,
+    "emergency_relation": False, "differently_abled": False,
+    # job
+    "department": False, "designation": False, "work_location": False, "employment_type": False,
+    "reporting_manager": False, "work_email": False,
 }
+CHOICES = {
+    "gender": ["male", "female", "transgender", "prefer_not_to_say"],
+    "marital_status": ["single", "married", "widowed", "divorced", "separated"],
+    "father_or_spouse_relation": ["father", "spouse"],
+    "blood_group": ["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"],
+    "differently_abled": ["no", "yes"],
+    "employment_type": ["permanent", "probation", "contract", "intern", "consultant"],
+}
+# Fields only the employer fills in (the employee sees them read-only).
+EMPLOYER_FIELDS = {"department", "designation", "work_location", "employment_type", "reporting_manager", "work_email"}
 SECRET_FIELDS = {"pan": True, "account_number": True}
 
 
@@ -193,6 +214,14 @@ class EmployeeOnboardingService:
         for key, (pattern, message) in checks.items():
             if values.get(key) and not pattern.match(values[key]):
                 errors[key] = message
+        for key, options in CHOICES.items():
+            if values.get(key) and values[key] not in options:
+                errors[key] = "Choose one of the options"
+        for key in ("personal_email", "work_email"):
+            if values.get(key) and not EMAIL_RE.match(values[key]):
+                errors[key] = "Enter a valid email address"
+        if values.get("father_or_spouse_name") and not values.get("father_or_spouse_relation"):
+            errors["father_or_spouse_relation"] = "Say whether this is the father or the spouse"
         dob = values.get("date_of_birth")
         if dob:
             try:
@@ -209,6 +238,40 @@ class EmployeeOnboardingService:
                     errors[key] = "Needed before you submit"
         return errors
 
+    def _apply(self, p: EmployeeProfile, values: dict, require: bool) -> None:
+        """Clean, validate and store answers on the profile. Blank secrets keep their stored value."""
+        clean = {k: str(v or "").strip() for k, v in values.items() if k in DETAIL_FIELDS or k in SECRET_FIELDS}
+        for k in ("pan", "ifsc"):
+            if k in clean:
+                clean[k] = clean[k].upper()
+        for k in ("phone", "emergency_phone", "account_number", "uan", "esi_ip"):
+            if k in clean:
+                clean[k] = re.sub(r"[\s-]", "", clean[k])
+        for k in ("personal_email", "work_email"):
+            if k in clean:
+                clean[k] = clean[k].lower()
+        merged = {**{k: p.details.get(k, "") for k in DETAIL_FIELDS},
+                  "pan": crypto.decrypt(p.pan_enc) or "", "account_number": crypto.decrypt(p.account_enc) or ""}
+        merged.update({k: v for k, v in clean.items() if v or k in DETAIL_FIELDS})
+        errors = self._validate(merged, require=require)
+        if errors:
+            raise ServiceError("Check the highlighted fields", errors=errors)
+        p.details = {k: merged.get(k, "") for k in DETAIL_FIELDS}
+        p.pan_enc = crypto.encrypt(merged.get("pan"))
+        p.account_enc = crypto.encrypt(merged.get("account_number"))
+
+    def save_for_admin(self, actor: User, client_id: str, code: str, values: dict) -> dict:
+        """The employer edits an employee's personal, job, statutory and bank details at any time.
+        The onboarding status does not change."""
+        self.auth.check_client(actor, client_id)
+        self.repo.get_employee(client_id, code)
+        p = self._profile(client_id, code)
+        self._apply(p, values, require=False)
+        self.repo.save_profile(p)
+        self.payroll._audit(actor.email, "profile.admin_edit", f"employee/{client_id}/{code}",
+                            ", ".join(sorted(k for k in values if values.get(k) not in (None, ""))))
+        return self._out(p, reveal=True)
+
     def save_my_profile(self, actor: User, values: dict, submit: bool = False) -> dict:
         """Save the employee's answers; with submit=True every required field must be filled in."""
         if actor.impersonated_by:
@@ -217,23 +280,8 @@ class EmployeeOnboardingService:
         p = self._profile(client_id, code)
         if p.status in (ProfileStatus.SUBMITTED, ProfileStatus.VERIFIED):
             raise ServiceError("Your details are with your employer. Ask them to return the form to change it.")
-        clean = {k: str(v or "").strip() for k, v in values.items() if k in DETAIL_FIELDS or k in SECRET_FIELDS}
-        for k in ("pan", "ifsc"):
-            if k in clean:
-                clean[k] = clean[k].upper()
-        for k in ("phone", "emergency_phone", "account_number", "uan", "esi_ip"):
-            if k in clean:
-                clean[k] = re.sub(r"[\s-]", "", clean[k])
-        # Keep stored secrets when the form sends them back blank.
-        merged = {**{k: p.details.get(k, "") for k in DETAIL_FIELDS},
-                  "pan": crypto.decrypt(p.pan_enc) or "", "account_number": crypto.decrypt(p.account_enc) or ""}
-        merged.update({k: v for k, v in clean.items() if v or k in DETAIL_FIELDS})
-        errors = self._validate(merged, require=submit)
-        if errors:
-            raise ServiceError("Check the highlighted fields", errors=errors)
-        p.details = {k: merged.get(k, "") for k in DETAIL_FIELDS}
-        p.pan_enc = crypto.encrypt(merged.get("pan"))
-        p.account_enc = crypto.encrypt(merged.get("account_number"))
+        values = {k: v for k, v in values.items() if k not in EMPLOYER_FIELDS}  # employer-only fields
+        self._apply(p, values, require=submit)
         if submit:
             p.status, p.submitted_at = ProfileStatus.SUBMITTED, self._now()
         self.repo.save_profile(p)
