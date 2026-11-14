@@ -1,4 +1,5 @@
 import { cloneElement, useEffect, useState } from 'react'
+import ClientLocations from '../components/ClientLocations.jsx'
 import { api } from '../api.js'
 import InfoTip from '../components/InfoTip.jsx'
 
@@ -171,6 +172,7 @@ export default function ClientsPage({ clients, onCreated, onOpen, onUpdated }) {
               <button type="button" onClick={() => { setMode('none'); setSelectedId(null) }}>Close</button>
             </div>
           </form>
+          {editing && <ClientLocations clientId={selectedId} states={states} />}
         </section>
       )}
     </div>

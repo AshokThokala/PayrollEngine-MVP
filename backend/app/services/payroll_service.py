@@ -310,7 +310,7 @@ class PayrollService:
 
     def update_employee(self, client_id: str, code: str, user: str, *, name: str | None = None,
                         components: dict | None = None, flags: dict | None = None,
-                        pay_type: str | None = None, hourly_rate=None) -> list[str]:
+                        pay_type: str | None = None, hourly_rate=None, location_id: str | None = None) -> list[str]:
         """Edit an employee's name, statutory settings and salary (a new salary version)."""
         record = self.repo.get_employee(client_id, code)
         e, changed = record.employee, []
@@ -323,6 +323,13 @@ class PayrollService:
             if key in self.EMPLOYEE_FLAGS and getattr(e, key) != value:
                 setattr(e, key, value)
                 changed.append(key)
+        if location_id is not None and location_id != (e.location_id or ""):
+            from .locations import LocationService
+            loc = LocationService(self).resolve(client_id, location_id)
+            if loc.id != e.location_id:
+                self._audit(user, "employee.location", f"{client_id}/{code}", f"{e.location_id or '-'} -> {loc.name} ({loc.state})")
+                e.location_id, e.state = loc.id, loc.state
+                changed.append("location")
         if pay_type is not None or hourly_rate is not None:
             new_type = pay_type or e.pay_type
             new_rate = D(hourly_rate) if hourly_rate not in (None, "") else e.hourly_rate
@@ -359,7 +366,9 @@ class PayrollService:
             pass
         else:
             raise ServiceError(f"Employee code '{record.code}' is already used in this client", field="code")
-        record.employee.state = client.state
+        from .locations import LocationService
+        loc = LocationService(self).resolve(record.client_id, record.employee.location_id)
+        record.employee.location_id, record.employee.state = loc.id, loc.state  # PT/LWF follow the work location
         self._check_pay_type(record.employee.pay_type, record.employee.hourly_rate)
         if record.employee.pay_type == "salaried" and record.structure.total <= 0:
             raise ServiceError("Enter at least one salary amount", field="components")

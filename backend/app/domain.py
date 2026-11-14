@@ -375,3 +375,23 @@ class Timesheet:
     note: str = ""
     updated_by: str = ""
     approved_by: str | None = None
+
+
+@dataclass
+class ClientLocation:
+    """A place where a client's employees work (head office, branch, factory, site).
+    The location's state decides Professional Tax and Labour Welfare Fund for employees there."""
+
+    id: str
+    client_id: str
+    name: str
+    state: str
+    address: str = ""
+    city: str = ""
+    pincode: str = ""
+    pt_registration: str = ""    # PT employer registration in that state
+    lwf_registration: str = ""
+    esi_code: str = ""           # ESI sub-code for a branch, if any
+    se_registration: str = ""    # Shops and Establishments registration
+    head_office: bool = False
+    active: bool = True

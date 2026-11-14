@@ -38,6 +38,7 @@ class EmployeeIn(BaseModel):
     components: dict[str, Amount] = {}
     pay_type: str = "salaried"  # or "hourly"
     hourly_rate: Decimal | None = None
+    location_id: str | None = None  # blank = head office
     pf_member: bool = True
     eps_member: bool = True
     pf_on_full_wages: bool = False
@@ -56,6 +57,8 @@ class EmployeeOut(BaseModel):
     monthly_total: Decimal
     designation: str = ""
     department: str = ""
+    location_id: str | None = None
+    state: str = ""
     pay_type: str = "salaried"
     hourly_rate: Decimal = Decimal(0)
     flags: dict[str, bool | None] = {}
@@ -240,6 +243,7 @@ class EmployeeUpdate(BaseModel):
     components: dict[str, Amount] | None = None
     pay_type: str | None = None
     hourly_rate: Decimal | None = None
+    location_id: str | None = None
     flags: dict[str, bool | None] | None = None
 
 
@@ -405,3 +409,17 @@ class PasswordChangeIn(BaseModel):
 
 class PasswordResetIn(BaseModel):
     password: str = ""
+
+
+class LocationIn(BaseModel):
+    name: str = ""
+    state: str = ""
+    address: str = ""
+    city: str = ""
+    pincode: str = ""
+    pt_registration: str = ""
+    lwf_registration: str = ""
+    esi_code: str = ""
+    se_registration: str = ""
+    head_office: bool = False
+    active: bool = True
