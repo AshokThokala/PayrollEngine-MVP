@@ -321,6 +321,11 @@ function AdminShell({ user, onLogout, onViewAs }) {
           {tab === 'clients' && platform && (
             <ClientsPage
               clients={clients}
+              onOpenEmployee={(cid, code) => {
+                setClientId(cid)
+                setOpenEmployee({ clientId: cid, code, n: Date.now() })
+                setTab('employees')
+              }}
               onCreated={async (id) => {
                 await loadClients()
                 setClientId(id)
