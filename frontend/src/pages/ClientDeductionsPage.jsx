@@ -102,7 +102,6 @@ export default function ClientDeductionsPage({ client, platform, onGo }) {
       <section className="card">
         <div className="run-head">
           <h2>{client.legal_name} <span className="tag">{inUse} in use</span></h2>
-          {platform && <button onClick={() => onGo('deductions')}>Deduction master</button>}
         </div>
         <div className="segmented small-seg five" role="tablist" aria-label="Show">
           {FILTERS.map(([k, label]) => (

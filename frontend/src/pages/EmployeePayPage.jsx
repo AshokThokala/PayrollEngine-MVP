@@ -72,7 +72,6 @@ export default function EmployeePayPage({ client, onGo }) {
       <section className="card">
         <div className="run-head">
           <h2>Employee pay <span className="tag">{grid.employees.length} employees</span></h2>
-          <button onClick={() => onGo('client-paycodes')}>Client pay codes</button>
         </div>
         <label className="check small"><input type="checkbox" checked={showExited} onChange={(e) => setShowExited(e.target.checked)} /> Show employees who left</label>
         {grid.employees.length === 0 ? (

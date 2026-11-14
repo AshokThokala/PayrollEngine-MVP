@@ -81,7 +81,6 @@ export default function ClientPayCodesPage({ client, platform, onGo }) {
       <section className="card">
         <div className="run-head">
           <h2>{client.legal_name} <span className="tag">{rows.filter((r) => r.enabled).length} in use</span></h2>
-          {platform && <button onClick={() => onGo('paycodes')}>Pay code master</button>}
         </div>
         <div className="segmented small-seg" role="tablist" aria-label="Show">
           {FILTERS.map(([k, label]) => (
