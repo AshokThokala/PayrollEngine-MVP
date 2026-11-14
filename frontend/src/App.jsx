@@ -107,28 +107,44 @@ const PAGES = {
 
 const MENU = [
   { group: 'Clients', items: [
-    { id: 'm-clients', label: 'Clients', icon: '▦', pages: ['clients'] },
-    { id: 'm-onboarding', label: 'Onboarding', icon: '✓', pages: ['onboarding', 'employee-onboarding'] },
-    { id: 'm-billing', label: 'Billing', icon: '◫', pages: ['billing'] },
+    { id: 'm-clients', label: 'Clients', icon: '▦', pages: ['clients'], about: 'Companies you run payroll for: registrations, state and contacts.' },
+    { id: 'm-onboarding', label: 'Onboarding', icon: '✓', pages: ['onboarding', 'employee-onboarding'], about: 'Get a client and its employees ready for their first payroll.' },
+    { id: 'm-billing', label: 'Billing', icon: '◫', pages: ['billing'], about: 'Plans, monthly invoices with GST, and payments.' },
   ] },
   { group: 'People', items: [
-    { id: 'm-employees', label: 'Employees', icon: '☺', pages: ['employees'] },
-    { id: 'm-pay', label: 'Pay codes', icon: '⊕', pages: ['employee-pay', 'client-paycodes', 'paycodes'] },
-    { id: 'm-deductions', label: 'Deductions', icon: '⊖', pages: ['employee-deductions', 'client-deductions', 'deductions'] },
+    { id: 'm-employees', label: 'Employees', icon: '☺', pages: ['employees'], about: 'Employee records, salary, statutory settings and tax details.' },
+    { id: 'm-pay', label: 'Pay codes', icon: '⊕', pages: ['employee-pay', 'client-paycodes', 'paycodes'], about: 'What employees are paid: salary components and variable pay.' },
+    { id: 'm-deductions', label: 'Deductions', icon: '⊖', pages: ['employee-deductions', 'client-deductions', 'deductions'], about: 'Voluntary deductions and recoveries on top of PF, ESI, PT and TDS.' },
   ] },
   { group: 'Payroll', items: [
-    { id: 'm-time', label: 'Time entry', icon: '◴', pages: ['time'] },
-    { id: 'm-runs', label: 'Payroll runs', icon: '₹', pages: ['runs'] },
-    { id: 'm-reports', label: 'Reports', icon: '▤', pages: ['reports'] },
+    { id: 'm-time', label: 'Time entry', icon: '◴', pages: ['time'], about: 'Attendance for salaried staff and hours for hourly staff, month by month.' },
+    { id: 'm-runs', label: 'Payroll runs', icon: '₹', pages: ['runs'], about: 'Calculate, review, approve and lock each month\'s payroll.' },
+    { id: 'm-reports', label: 'Reports', icon: '▤', pages: ['reports'], about: 'Salary register, statutory summaries and exports.' },
   ] },
   { group: 'Compliance', items: [
-    { id: 'm-calendar', label: 'Compliance calendar', icon: '◷', pages: ['filings'] },
-    { id: 'm-rules', label: 'Tax and rules', icon: '§', pages: ['tax', 'rules'] },
+    { id: 'm-calendar', label: 'Compliance calendar', icon: '◷', pages: ['filings'], about: 'PF, ESI, PT and TDS due dates, so nothing is filed late.' },
+    { id: 'm-rules', label: 'Tax and rules', icon: '§', pages: ['tax', 'rules'], about: 'Income tax slabs and the dated statutory rules payroll uses.' },
   ] },
   { group: 'Settings', items: [
-    { id: 'm-users', label: 'Users and access', icon: '⚿', pages: ['users'] },
+    { id: 'm-users', label: 'Users and access', icon: '⚿', pages: ['users'], about: 'Who can log in, their role and which client they see.' },
   ] },
 ]
+
+// Remember sidebar choices in this browser (storage can be unavailable, e.g. private mode).
+function useStored(key, initial) {
+  const [value, setValue] = useState(() => {
+    try {
+      const raw = window.localStorage.getItem(key)
+      return raw === null ? initial : JSON.parse(raw)
+    } catch {
+      return initial
+    }
+  })
+  useEffect(() => {
+    try { window.localStorage.setItem(key, JSON.stringify(value)) } catch { /* not saved; fine */ }
+  }, [key, value])
+  return [value, setValue]
+}
 
 function AdminShell({ user, onLogout, onViewAs }) {
   const platform = user.is_platform_admin
@@ -165,21 +181,37 @@ function AdminShell({ user, onLogout, onViewAs }) {
     if (current) setLastTab((m) => (m[current.id] === tab ? m : { ...m, [current.id]: tab }))
   }, [tab, current])
   const disabled = (id) => PAGES[id].needsClient && !clientId
+  const [railOnly, setRailOnly] = useStored('cp4u.sidebar.collapsed', false) // icons only
+  const [closedGroups, setClosedGroups] = useStored('cp4u.sidebar.closedGroups', [])
+  const toggleGroup = (g) => setClosedGroups((list) => (list.includes(g) ? list.filter((x) => x !== g) : [...list, g]))
+  const currentGroup = menu.find((g) => g.items.some((i) => i.id === current?.id))?.group
 
   return (
-    <div className="shell">
+    <div className={railOnly ? 'shell rail' : 'shell'}>
       <aside className="sidebar">
         <div className="brand">
           <span className="logo">C4U</span>
-          <span>
+          <span className="brand-text">
             ClearPay4U
             <span className="tagline">zero-penalty payroll</span>
           </span>
+          <button type="button" className="rail-toggle" onClick={() => setRailOnly(!railOnly)}
+            aria-label={railOnly ? 'Expand menu' : 'Collapse menu'} title={railOnly ? 'Expand menu' : 'Collapse menu'}
+            aria-expanded={!railOnly}>
+            {railOnly ? '»' : '«'}
+          </button>
         </div>
         <nav className="side-nav" aria-label="Main">
-          {menu.map((g) => (
-            <div key={g.group} className="nav-group" role="group" aria-label={g.group}>
-              <span className="nav-group-label">{g.group}</span>
+          {menu.map((g) => {
+            const closed = closedGroups.includes(g.group) && !railOnly
+            return (
+            <div key={g.group} className={closed ? 'nav-group closed' : 'nav-group'} role="group" aria-label={g.group}>
+              <button type="button" className="nav-group-label" onClick={() => toggleGroup(g.group)} aria-expanded={!closed}
+                title={closed ? `Show ${g.group}` : `Hide ${g.group}`}>
+                <span>{g.group}</span>
+                {closed && currentGroup === g.group && <span className="dot" aria-label="current page is here" />}
+                <span className="chev" aria-hidden="true">{closed ? '▸' : '▾'}</span>
+              </button>
               {g.items.map((item) => {
                 const target = lastTab[item.id] && item.pages.includes(lastTab[item.id]) ? lastTab[item.id] : item.pages.find((id) => !disabled(id)) || item.pages[0]
                 return (
@@ -189,19 +221,21 @@ function AdminShell({ user, onLogout, onViewAs }) {
                     disabled={item.pages.every(disabled)}
                     aria-current={current?.id === item.id ? 'page' : undefined}
                     onClick={() => setTab(target)}
+                    title={railOnly ? item.label : undefined}
                   >
                     <span className="nav-icon" aria-hidden="true">{item.icon}</span>
-                    <span>{item.label}</span>
+                    <span className="nav-label">{item.label}</span>
                   </button>
                 )
               })}
             </div>
-          ))}
+            )
+          })}
         </nav>
         <div className="side-footer">
-          <div className="who">
+          <div className="who" title={railOnly ? user.name : undefined}>
             <span className="avatar" aria-hidden="true">{user.name.slice(0, 1).toUpperCase()}</span>
-            <span>
+            <span className="who-text">
               <strong>{user.name}</strong>
               <span className="muted small">{platform ? 'Platform admin' : 'Client admin'}</span>
             </span>
@@ -232,16 +266,40 @@ function AdminShell({ user, onLogout, onViewAs }) {
         {error && <div className="banner error">{error}</div>}
 
         <main>
+          {current && (
+            <div className="page-head">
+              <span className="page-icon" aria-hidden="true">{current.icon}</span>
+              <div className="page-head-text">
+                <nav className="crumbs" aria-label="You are here">
+                  <span>{currentGroup}</span>
+                  <span aria-hidden="true">›</span>
+                  <span>{current.label}</span>
+                  {current.pages.length > 1 && <><span aria-hidden="true">›</span><strong>{PAGES[tab].label}</strong></>}
+                  {PAGES[tab].needsClient && client && <span className="crumb-client">· {client.legal_name}</span>}
+                </nav>
+                <p className="page-about">{current.about}</p>
+              </div>
+            </div>
+          )}
           {current && current.pages.length > 1 && (
             <div className="page-tabs" role="tablist" aria-label={current.label}>
               {current.pages.map((id) => (
                 <button key={id} role="tab" aria-selected={tab === id} className={tab === id ? 'active' : ''}
                   disabled={disabled(id)} onClick={() => setTab(id)}>
                   {PAGES[id].label}
+                  {PAGES[id].platformOnly && <span className="tab-badge">team</span>}
                 </button>
               ))}
             </div>
           )}
+          {PAGES[tab]?.needsClient && !client && (
+            <div className="empty-page card">
+              <span className="page-icon" aria-hidden="true">▦</span>
+              <h2>Choose a client</h2>
+              <p className="muted">This page works on one client at a time. Pick one with the client switcher at the top right.</p>
+            </div>
+          )}
+          <div className="page-body" key={tab}>
           {tab === 'clients' && platform && (
             <ClientsPage
               clients={clients}
@@ -287,6 +345,7 @@ function AdminShell({ user, onLogout, onViewAs }) {
               }}
             />
           )}
+          </div>
         </main>
       </div>
     </div>

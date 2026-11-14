@@ -49,6 +49,8 @@ The menu is grouped by what you're doing; items with several pages show them as 
 | Settings | Users and access | |
 
 Master lists, Clients and Compliance rules are for the ClearPay4U team only. Each menu item reopens the tab you used last.
+Click a group heading to fold it away, or « to shrink the menu to icons (») - the browser remembers both. Every page
+opens with a header: where you are (group › item › tab · client), what the page is for, then its tabs.
 
 - **Time entry** (salaried and hourly): pick a month, click an employee and fill in a calendar.
   - *Salaried*: a status per day - present, absent (A), half day (HD), paid leave (L), holiday (H), weekly off (WO) -
