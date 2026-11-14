@@ -500,3 +500,64 @@ table.pay-grid th, table.pay-grid td { white-space: nowrap; }
   .nav-group { flex-direction: row; gap: 6px; }
   .nav-group-label { display: none; }
 }
+
+/* --- collapsible menu --------------------------------------------------------------------- */
+.shell { transition: grid-template-columns 0.2s ease; }
+.shell.rail { grid-template-columns: 72px minmax(0, 1fr); }
+.sidebar .brand { position: relative; }
+.rail-toggle { margin-left: auto; width: 28px; height: 28px; padding: 0; border-radius: 8px; border: 1px solid rgba(255, 255, 255, 0.18);
+  background: rgba(255, 255, 255, 0.06); color: var(--navy-text); cursor: pointer; font-size: 0.9rem; line-height: 1; }
+.rail-toggle:hover { background: rgba(255, 255, 255, 0.14); color: #fff; }
+button.nav-group-label { display: flex; align-items: center; gap: 6px; width: 100%; border: 0; background: transparent; cursor: pointer;
+  text-align: left; font: inherit; font-size: 0.68rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; }
+button.nav-group-label:hover { opacity: 1; color: #fff; }
+.nav-group-label .chev { margin-left: auto; font-size: 0.7rem; }
+.nav-group-label .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--saffron); }
+.nav-group.closed { gap: 0; }
+.nav-group.closed .nav-item { display: none; }
+.shell.rail .sidebar { padding: 16px 10px; align-items: center; }
+.shell.rail .brand { flex-direction: column; gap: 10px; }
+.shell.rail .brand-text, .shell.rail .nav-label, .shell.rail .who-text,
+.shell.rail .nav-group-label { display: none; }
+.shell.rail .nav-group.closed .nav-item { display: flex; }
+.shell.rail .rail-toggle { margin: 0; }
+.shell.rail .side-nav { width: 100%; }
+.shell.rail .nav-group { padding-top: 8px; border-top: 1px solid rgba(255, 255, 255, 0.1); }
+.shell.rail .nav-group:first-child { border-top: 0; padding-top: 0; }
+.shell.rail .nav-item { justify-content: center; padding: 10px 0; }
+.shell.rail .nav-icon { width: auto; font-size: 1.1rem; }
+.shell.rail .side-footer { align-items: center; width: 100%; }
+.shell.rail .side-footer .ghost { font-size: 0; padding: 8px; }
+.shell.rail .side-footer .ghost::before { content: '⏻'; font-size: 1rem; }
+.shell.rail .side-footer button.ghost:first-of-type::before { content: '⚿'; }
+
+/* --- page header, tabs and page body ------------------------------------------------------- */
+.page-head { display: flex; align-items: center; gap: 14px; margin: 0 0 16px; }
+.page-icon { flex: none; display: grid; place-items: center; width: 44px; height: 44px; border-radius: 12px; font-size: 1.3rem;
+  background: linear-gradient(135deg, var(--brand-soft), #fff); color: var(--brand); border: 1px solid #cfe8df;
+  box-shadow: 0 2px 6px rgba(11, 122, 99, 0.08); }
+.page-head-text { min-width: 0; }
+.crumbs { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: 0.78rem; color: var(--muted); }
+.crumbs strong { color: var(--ink); font-weight: 600; }
+.crumb-client { color: var(--brand); font-weight: 600; }
+.page-about { margin: 2px 0 0; color: var(--ink); font-size: 0.95rem; }
+.page-tabs { background: rgba(255, 255, 255, 0.7); border: 1px solid var(--line); border-radius: 12px; padding: 4px; gap: 4px; }
+.page-tabs button { border-bottom: 0; border-radius: 9px; padding: 8px 14px; margin: 0; }
+.page-tabs button.active { background: #fff; color: var(--brand); box-shadow: 0 1px 4px rgba(16, 37, 66, 0.12); }
+.tab-badge { margin-left: 6px; padding: 1px 6px; border-radius: 999px; background: var(--saffron-soft); color: var(--warn);
+  font-size: 0.62rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; }
+.page-body { animation: page-in 0.18s ease-out; }
+@keyframes page-in { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .page-body { animation: none; } .shell { transition: none; } }
+.empty-page { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 8px; padding: 40px 20px; }
+.page-body .card { transition: box-shadow 0.15s ease; }
+.page-body .card:hover { box-shadow: 0 6px 22px rgba(16, 37, 66, 0.07); }
+@media (max-width: 900px) {
+  .shell.rail { grid-template-columns: 1fr; }
+  .rail-toggle { display: none; }
+  .page-head { gap: 10px; }
+  .page-icon { width: 36px; height: 36px; font-size: 1.05rem; }
+  .page-about { font-size: 0.85rem; }
+  button.nav-group-label { display: none; }
+  .nav-group.closed .nav-item { display: flex; }
+}
