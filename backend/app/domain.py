@@ -294,3 +294,16 @@ class EmployeeDeduction:
     end_month: date | None = None  # first day of the last month; None = until stopped
     note: str = ""
     created_by: str = ""
+
+
+@dataclass
+class ClientDeduction:
+    """A client's choice of a master deduction type: switched on for its employees, with its own
+    default, cap and payslip name (blank = use the master's)."""
+
+    client_id: str
+    deduction_code: str
+    enabled: bool = True
+    default_value: Decimal | None = None
+    max_amount: Decimal | None = None
+    payslip_label: str = ""

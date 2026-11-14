@@ -32,7 +32,7 @@ from ..services.employee_onboarding import EmployeeOnboardingService
 from ..mailer import SmtpMailer, app_url
 from ..services import tax as tax_rules
 from ..services.search import search as run_search
-from ..services.deductions import CALC_LABELS, TAX_SECTIONS, DeductionService
+from ..services.deductions import CALC_LABELS, TAX_SECTIONS, DeductionService, client_types
 from . import errors
 from . import schemas as s
 
@@ -684,11 +684,14 @@ def _dtype_out(t):
             "description": t.description, "active": t.active, "system": t.system}
 
 
-def _ededuct_out(d, types):
+def _ededuct_out(d, types, names=None):
     t = types.get(d.deduction_code)
-    return {"id": d.id, "employee_code": d.employee_code, "deduction_code": d.deduction_code,
-            "name": t.name if t else d.deduction_code, "calc": t.calc.value if t else "fixed",
-            "value": d.value, "start_month": d.start_month, "end_month": d.end_month, "note": d.note}
+    out = {"id": d.id, "employee_code": d.employee_code, "deduction_code": d.deduction_code,
+           "name": t.name if t else d.deduction_code, "calc": t.calc.value if t else "fixed",
+           "value": d.value, "start_month": d.start_month, "end_month": d.end_month, "note": d.note}
+    if names is not None:
+        out["employee_name"] = names.get(d.employee_code, d.employee_code)
+    return out
 
 
 @app.get("/deduction-types")
@@ -707,6 +710,49 @@ def add_deduction_type(body: s.DeductionTypeIn, actor: User = Depends(platform_a
 def edit_deduction_type(code: str, body: s.DeductionTypeIn, actor: User = Depends(platform_admin),
                         ds: DeductionService = Depends(get_deductions)):
     return _dtype_out(ds.save_type(actor, body.model_dump(), code=code))
+
+
+@app.get("/clients/{client_id}/deductions")
+def client_deductions(client_id: str, actor: User = Depends(admin_user), ds: DeductionService = Depends(get_deductions),
+                      auth: AuthService = Depends(get_auth)):
+    """Every master deduction with this client's choice (on/off, own default, cap, payslip name)."""
+    auth.check_client(actor, client_id)
+    rows = []
+    for r in ds.client_settings(client_id):
+        t = r["type"]
+        rows.append({**_dtype_out(t), "statutory": r["statutory"], "enabled": r["enabled"],
+                     "master_default_value": t.default_value, "master_max_amount": t.max_amount,
+                     "master_payslip_label": t.payslip_label, "default_value": r["default_value"],
+                     "max_amount": r["max_amount"], "payslip_label": r["payslip_label"], "employees": r["employees"]})
+    return rows
+
+
+@app.put("/clients/{client_id}/deductions/{code}")
+def set_client_deduction(client_id: str, code: str, body: s.ClientDeductionIn, actor: User = Depends(admin_user),
+                         ds: DeductionService = Depends(get_deductions), auth: AuthService = Depends(get_auth)):
+    auth.check_client(actor, client_id)
+    cd = ds.set_client(actor, client_id, code, body.model_dump())
+    return {"code": cd.deduction_code, "enabled": cd.enabled, "default_value": cd.default_value,
+            "max_amount": cd.max_amount, "payslip_label": cd.payslip_label}
+
+
+@app.get("/clients/{client_id}/deductions/available")
+def available_deductions(client_id: str, actor: User = Depends(admin_user), svc: PayrollService = Depends(get_service),
+                         auth: AuthService = Depends(get_auth)):
+    """Deductions this client's employees can be given (switched on, with the client's defaults)."""
+    auth.check_client(actor, client_id)
+    return [_dtype_out(t) for t in client_types(svc.repo, client_id).values()]
+
+
+@app.get("/clients/{client_id}/employee-deductions")
+def all_employee_deductions(client_id: str, actor: User = Depends(admin_user),
+                            ds: DeductionService = Depends(get_deductions), svc: PayrollService = Depends(get_service),
+                            auth: AuthService = Depends(get_auth)):
+    """Every employee's standing deductions for the client."""
+    auth.check_client(actor, client_id)
+    types = {t.code: t for t in ds.types()}
+    names = {r.code: r.employee.name for r in svc.repo.list_employees(client_id)}
+    return [_ededuct_out(d, types, names) for d in ds.for_client(client_id)]
 
 
 @app.get("/clients/{client_id}/employees/{code}/deductions")

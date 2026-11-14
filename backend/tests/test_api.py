@@ -315,10 +315,14 @@ def test_deductions_api(client, ops):
     assert r.status_code == 422 and {e["label"] for e in r.json()["errors"]} == {"Code", "Name"}
     assert client.post("/deduction-types", headers=ops, json={"code": "gym", "name": "Gym", "category": "voluntary",
                                                               "calc": "fixed"}).status_code == 201
+    assert client.put("/clients/acme/deductions/loan_emi", headers=ops, json={"enabled": True}).status_code == 200
     d = client.post("/clients/acme/employees/E1/deductions", headers=ops,
                     json={"deduction_code": "loan_emi", "value": "2500", "start_month": "2026-10"})
     assert d.status_code == 201 and d.json()["name"] == "Employee loan EMI"
     run = client.post("/clients/acme/runs", headers=ops, json={"period": "2026-10-01"}).json()
     slip = run["slips"][0] if isinstance(run["slips"], list) else next(iter(run["slips"].values()))
     assert any(x["code"] == "loan_emi" for x in slip["deductions"])
+    rows = client.get("/clients/acme/deductions", headers=ops).json()
+    assert next(r for r in rows if r["code"] == "loan_emi")["employees"] == 1
+    assert client.get("/clients/acme/employee-deductions", headers=ops).json()[0]["employee_name"] == "Ravi"
     assert client.delete(f"/clients/acme/employees/E1/deductions/{d.json()['id']}", headers=ops).json() == {"ok": True}

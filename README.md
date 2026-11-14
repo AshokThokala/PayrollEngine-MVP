@@ -38,14 +38,16 @@ The admin who processed a payroll run can approve it. Set `REQUIRE_SEPARATE_APPR
 admin (maker-checker).
 
 ### Working in the app
-- **Deduction types** (master list; the ClearPay4U team edits it, client admins can view): every deduction an employee
-  in India can have. *Statutory* (PF, ESI, PT, LWF, TDS) are worked out from the compliance rules - only their names
-  can change. *Voluntary* (VPF, NPS, group health/term insurance, donations, union fee, canteen, transport) and
-  *Recoveries* (salary advance, loan EMI, notice pay, asset recovery) are calculated as a fixed ₹ amount, % of basic + DA
-  or % of gross, with an optional default and monthly cap, and the old-regime tax section they count toward. Click a row
-  to edit; *+ Add deduction* for your own. On **Employees**, open an employee → *Deductions* to give them one from a
-  first month to an optional last month; every payroll run in that window takes it automatically (a one-off amount
-  entered for a run replaces it for that month).
+- **Deductions, at three levels:**
+  - **Deduction master** (ClearPay4U team): every deduction an employee in India can have. *Statutory* (PF, ESI, PT,
+    LWF, TDS) come from the compliance rules - only their names can change. *Voluntary* (VPF, NPS, insurance,
+    donations, union fee, canteen, transport) and *Recoveries* (advance, loan EMI, notice pay, asset recovery) are a
+    fixed ₹ amount, % of basic + DA or % of gross, with a default, monthly cap and old-regime tax section.
+  - **Client deductions**: switch on the deductions a client offers (quick switch in the list), and set the client's
+    own default, cap and payslip name. Switching one off stops it in future runs. Statutory ones always apply.
+  - **Employee deductions**: every employee deduction of the client in one list - *+ Add deduction*, pick an employee
+    and one of the client's deductions, ₹ or %, first and optional last month. Also on each employee's record. Every
+    payroll run in that window takes it, within the client's cap (a one-off amount entered for a run replaces it).
 - **Users and access → + Add user**: add an admin with a temporary password. Platform admins can add platform admins
   or an admin for any client; client admins add admins for their own company. Employees join through *Employee
   onboarding* invites instead.
@@ -235,6 +237,7 @@ python -m pytest
 | `billing_plans` | One billing plan per client: plan, rates, billing email |
 | `invoices` | Monthly invoices: lines (JSON), GST split, number, status, payment reference |
 | `deduction_types` | Master list of deductions (statutory, voluntary, recovery), calculation, cap, tax section |
+| `client_deductions` | Deductions each client uses, with the client's default, cap and payslip name |
 | `employee_deductions` | Standing deductions per employee: type, ₹ or %, first and last month |
 | `invites` | Employee invite links: email, token hash, expiry, used/cancelled |
 | `employee_profiles` | Joining details per employee; PAN and account number encrypted; draft/submitted/returned/verified |

@@ -1,4 +1,7 @@
-"""Deduction master (the kinds of deduction an employee can have) and standing employee deductions.
+"""Deductions at three levels:
+  1. Master (platform): every kind of deduction an employee in India can have.
+  2. Client: which master deductions a client uses, with its own default, cap and payslip name.
+  3. Employee: standing deductions for an employee, from the deductions their client uses.
 
 Statutory deductions (PF, ESI, PT, LWF, TDS) are worked out by the payroll engine; their entries here
 describe them and let admins rename them. Voluntary deductions and recoveries are set per employee
@@ -14,7 +17,9 @@ from datetime import date
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
 
-from ..domain import DeductionCalc, DeductionCategory, DeductionType, EmployeeDeduction, User
+import dataclasses
+
+from ..domain import ClientDeduction, DeductionCalc, DeductionCategory, DeductionType, EmployeeDeduction, User
 from ..engine.money import D, paise
 from .auth_service import AccessDenied
 from .payroll_service import PayrollService, ServiceError
@@ -64,6 +69,22 @@ def _amount(value, field: str, errors: dict) -> Decimal | None:
     if d < 0:
         errors[field] = "Cannot be negative"
     return d
+
+
+def client_types(repo, client_id: str) -> dict[str, DeductionType]:
+    """Deduction types a client's employees can be given: active master types the client has switched
+    on, with the client's own default, cap and payslip name filled in."""
+    settings = {cd.deduction_code: cd for cd in repo.list_client_deductions(client_id)}
+    out = {}
+    for t in repo.list_deduction_types():
+        cd = settings.get(t.code)
+        if t.calc == DeductionCalc.STATUTORY or not t.active or cd is None or not cd.enabled:
+            continue
+        out[t.code] = dataclasses.replace(
+            t, default_value=t.default_value if cd.default_value is None else cd.default_value,
+            max_amount=t.max_amount if cd.max_amount is None else cd.max_amount,
+            payslip_label=cd.payslip_label or t.payslip_label)
+    return out
 
 
 def monthly_amount(t: DeductionType, value: Decimal, basic_da: Decimal, gross: Decimal) -> Decimal:
@@ -153,6 +174,59 @@ class DeductionService:
         self.payroll._audit(actor.email, action, f"deduction_type/{t.code}", t.name)
         return t
 
+    # --- client level ---------------------------------------------------------------------------------
+    def client_settings(self, client_id: str) -> list[dict]:
+        """Every master deduction with this client's choice. Statutory ones always apply."""
+        self.repo.get_client(client_id)
+        settings = {cd.deduction_code: cd for cd in self.repo.list_client_deductions(client_id)}
+        used: dict[str, int] = {}
+        for d in self.repo.list_employee_deductions(client_id):
+            used[d.deduction_code] = used.get(d.deduction_code, 0) + 1
+        rows = []
+        for t in self.repo.list_deduction_types():
+            if not t.active and t.code not in settings:
+                continue
+            cd = settings.get(t.code)
+            statutory = t.calc == DeductionCalc.STATUTORY
+            rows.append({"type": t, "statutory": statutory,
+                         "enabled": statutory or bool(cd and cd.enabled and t.active),
+                         "default_value": cd.default_value if cd else None,
+                         "max_amount": cd.max_amount if cd else None,
+                         "payslip_label": cd.payslip_label if cd else "",
+                         "employees": used.get(t.code, 0)})
+        return rows
+
+    def set_client(self, actor: User, client_id: str, code: str, data: dict) -> ClientDeduction:
+        """Switch a master deduction on or off for a client, with its own default, cap and payslip name."""
+        self.repo.get_client(client_id)
+        t = self.repo.get_deduction_type(code)
+        if t is None:
+            raise ServiceError(f"No deduction type {code!r}")
+        if t.calc == DeductionCalc.STATUTORY:
+            raise ServiceError("Statutory deductions always apply; they cannot be switched off for a client")
+        errors: dict[str, str] = {}
+        enabled = bool(data.get("enabled", True))
+        if enabled and not t.active:
+            errors["enabled"] = "This deduction is switched off in the master list"
+        default_value = _amount(data.get("default_value"), "default_value", errors)
+        max_amount = _amount(data.get("max_amount"), "max_amount", errors)
+        if t.calc != DeductionCalc.FIXED and default_value is not None and default_value > 100 \
+                and "default_value" not in errors:
+            errors["default_value"] = "A percentage cannot be more than 100"
+        if errors:
+            raise ServiceError("Check the highlighted fields", errors=errors)
+        cd = ClientDeduction(client_id, code, enabled, default_value, max_amount,
+                             str(data.get("payslip_label") or "").strip())
+        self.repo.save_client_deduction(cd)
+        self.payroll._audit(actor.email, "client_deduction.update", f"client/{client_id}",
+                            f"{code} {'on' if enabled else 'off'}")
+        return cd
+
+    def for_client(self, client_id: str) -> list[EmployeeDeduction]:
+        """Every standing deduction of every employee of the client."""
+        self.repo.get_client(client_id)
+        return self.repo.list_employee_deductions(client_id)
+
     # --- per employee ---------------------------------------------------------------------------------
     def for_employee(self, client_id: str, code: str) -> list[EmployeeDeduction]:
         self.repo.get_employee(client_id, code)
@@ -165,13 +239,15 @@ class DeductionService:
         old = self.repo.get_employee_deduction(deduction_id) if deduction_id else None
         if old and (old.client_id, old.employee_code) != (client_id, code):
             raise ServiceError("This deduction belongs to another employee")
-        t = self.repo.get_deduction_type(data.get("deduction_code") or (old.deduction_code if old else ""))
-        if t is None:
+        wanted = data.get("deduction_code") or (old.deduction_code if old else "")
+        master = self.repo.get_deduction_type(wanted) if wanted else None
+        t = client_types(self.repo, client_id).get(wanted)
+        if master is None:
             errors["deduction_code"] = "Choose a deduction"
-        elif t.calc == DeductionCalc.STATUTORY:
+        elif master.calc == DeductionCalc.STATUTORY:
             errors["deduction_code"] = "Statutory deductions are worked out automatically"
-        elif not t.active and not old:
-            errors["deduction_code"] = "This deduction type is switched off"
+        elif t is None:
+            errors["deduction_code"] = "This client does not use this deduction; switch it on under Client deductions"
         value = _amount(data.get("value"), "value", errors)
         if value is None and t is not None and "value" not in errors:
             value = t.default_value
