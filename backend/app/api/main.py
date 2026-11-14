@@ -32,6 +32,7 @@ from ..services.employee_onboarding import EmployeeOnboardingService
 from ..mailer import SmtpMailer, app_url
 from ..services import tax as tax_rules
 from ..services.search import search as run_search
+from ..services.deductions import CALC_LABELS, TAX_SECTIONS, DeductionService
 from . import errors
 from . import schemas as s
 
@@ -668,3 +669,76 @@ def tax_calculate(body: s.TaxCalcIn, actor: User = Depends(current_user),
 def search(q: str = "", actor: User = Depends(admin_user), svc: PayrollService = Depends(get_service)):
     """Employees (by name or code) the user can see."""
     return run_search(svc, actor, q)
+
+
+# --- deduction master and employee deductions ----------------------------------------------------
+
+def get_deductions(svc: PayrollService = Depends(get_service)) -> DeductionService:
+    return DeductionService(svc)
+
+
+def _dtype_out(t):
+    return {"code": t.code, "name": t.name, "category": t.category.value, "calc": t.calc.value,
+            "calc_label": CALC_LABELS[t.calc.value], "payslip_label": t.payslip_label,
+            "default_value": t.default_value, "max_amount": t.max_amount, "tax_section": t.tax_section,
+            "description": t.description, "active": t.active, "system": t.system}
+
+
+def _ededuct_out(d, types):
+    t = types.get(d.deduction_code)
+    return {"id": d.id, "employee_code": d.employee_code, "deduction_code": d.deduction_code,
+            "name": t.name if t else d.deduction_code, "calc": t.calc.value if t else "fixed",
+            "value": d.value, "start_month": d.start_month, "end_month": d.end_month, "note": d.note}
+
+
+@app.get("/deduction-types")
+def deduction_types(actor: User = Depends(admin_user), ds: DeductionService = Depends(get_deductions)):
+    """The master list of deductions an employee can have, with the choices for the form."""
+    return {"types": [_dtype_out(t) for t in ds.types()], "calcs": CALC_LABELS, "tax_sections": TAX_SECTIONS}
+
+
+@app.post("/deduction-types", status_code=201)
+def add_deduction_type(body: s.DeductionTypeIn, actor: User = Depends(platform_admin),
+                       ds: DeductionService = Depends(get_deductions)):
+    return _dtype_out(ds.save_type(actor, body.model_dump()))
+
+
+@app.put("/deduction-types/{code}")
+def edit_deduction_type(code: str, body: s.DeductionTypeIn, actor: User = Depends(platform_admin),
+                        ds: DeductionService = Depends(get_deductions)):
+    return _dtype_out(ds.save_type(actor, body.model_dump(), code=code))
+
+
+@app.get("/clients/{client_id}/employees/{code}/deductions")
+def employee_deductions(client_id: str, code: str, actor: User = Depends(admin_user),
+                        ds: DeductionService = Depends(get_deductions), auth: AuthService = Depends(get_auth)):
+    auth.check_client(actor, client_id)
+    types = {t.code: t for t in ds.types()}
+    return [_ededuct_out(d, types) for d in ds.for_employee(client_id, code)]
+
+
+@app.post("/clients/{client_id}/employees/{code}/deductions", status_code=201)
+def add_employee_deduction(client_id: str, code: str, body: s.EmployeeDeductionIn,
+                           actor: User = Depends(admin_user), ds: DeductionService = Depends(get_deductions),
+                           auth: AuthService = Depends(get_auth)):
+    auth.check_client(actor, client_id)
+    d = ds.save_for_employee(actor, client_id, code, body.model_dump())
+    return _ededuct_out(d, {t.code: t for t in ds.types()})
+
+
+@app.put("/clients/{client_id}/employees/{code}/deductions/{deduction_id}")
+def edit_employee_deduction(client_id: str, code: str, deduction_id: str, body: s.EmployeeDeductionIn,
+                            actor: User = Depends(admin_user), ds: DeductionService = Depends(get_deductions),
+                            auth: AuthService = Depends(get_auth)):
+    auth.check_client(actor, client_id)
+    d = ds.save_for_employee(actor, client_id, code, body.model_dump(), deduction_id=deduction_id)
+    return _ededuct_out(d, {t.code: t for t in ds.types()})
+
+
+@app.delete("/clients/{client_id}/employees/{code}/deductions/{deduction_id}")
+def delete_employee_deduction(client_id: str, code: str, deduction_id: str, actor: User = Depends(admin_user),
+                              ds: DeductionService = Depends(get_deductions),
+                              auth: AuthService = Depends(get_auth)):
+    auth.check_client(actor, client_id)
+    ds.delete_for_employee(actor, client_id, code, deduction_id)
+    return {"ok": True}

@@ -9,7 +9,7 @@ from datetime import date
 from decimal import Decimal
 from typing import Protocol
 
-from .domain import (AuditEvent, BillingPlan, Client, EmployeeProfile, EmployeeRecord, Filing, Invite, Invoice,
+from .domain import (AuditEvent, BillingPlan, Client, DeductionType, EmployeeDeduction, EmployeeProfile, EmployeeRecord, Filing, Invite, Invoice,
                      PayrollRun, RunStatus, RunSummary, StatutoryRule, User)
 from .engine.models import Payslip
 
@@ -61,6 +61,13 @@ class Repository(Protocol):
     def list_profiles(self, client_id: str) -> list[EmployeeProfile]: ...
     def search_employees(self, query: str, client_ids: list[str] | None = None,
                          limit: int = 20) -> list[dict]: ...
+    def list_deduction_types(self) -> list[DeductionType]: ...
+    def get_deduction_type(self, code: str) -> DeductionType | None: ...
+    def save_deduction_type(self, t: DeductionType) -> None: ...
+    def list_employee_deductions(self, client_id: str, employee_code: str | None = None) -> list[EmployeeDeduction]: ...
+    def get_employee_deduction(self, deduction_id: str) -> EmployeeDeduction: ...
+    def save_employee_deduction(self, d: EmployeeDeduction) -> None: ...
+    def delete_employee_deduction(self, deduction_id: str) -> None: ...
     def get_user(self, user_id: str) -> User: ...
     def find_user_by_email(self, email: str) -> User | None: ...
     def list_users(self, client_id: str | None = None) -> list[User]: ...
@@ -76,6 +83,8 @@ class InMemoryRepository:
         self._rules: dict[str, StatutoryRule] = {}
         self._users: dict[str, User] = {}
         self._invites: dict[str, Invite] = {}
+        self._deduction_types: dict[str, DeductionType] = {}
+        self._employee_deductions: dict[str, EmployeeDeduction] = {}
         self._profiles: dict[tuple[str, str], EmployeeProfile] = {}
         self._plans: dict[str, BillingPlan] = {}
         self._invoices: dict[str, Invoice] = {}
@@ -185,6 +194,33 @@ class InMemoryRepository:
         hits.sort(key=lambda r: (r.exited_on is not None, r.employee.name.lower(), r.client_id, r.code))
         return [{"client_id": r.client_id, "code": r.code, "name": r.employee.name,
                  "exited_on": r.exited_on} for r in hits[:limit]]
+
+    def list_deduction_types(self) -> list[DeductionType]:
+        order = {"statutory": 0, "voluntary": 1, "recovery": 2}
+        return sorted(self._deduction_types.values(), key=lambda t: (order[t.category.value], t.name.lower()))
+
+    def get_deduction_type(self, code: str) -> DeductionType | None:
+        return self._deduction_types.get(code)
+
+    def save_deduction_type(self, t: DeductionType) -> None:
+        self._deduction_types[t.code] = t
+
+    def list_employee_deductions(self, client_id: str, employee_code: str | None = None) -> list[EmployeeDeduction]:
+        rows = [d for d in self._employee_deductions.values() if d.client_id == client_id
+                and (employee_code is None or d.employee_code == employee_code)]
+        return sorted(rows, key=lambda d: (d.employee_code, d.start_month, d.id))
+
+    def get_employee_deduction(self, deduction_id: str) -> EmployeeDeduction:
+        return self._get(self._employee_deductions, deduction_id, "Deduction")
+
+    def save_employee_deduction(self, d: EmployeeDeduction) -> None:
+        self.get_client(d.client_id)
+        if d.deduction_code not in self._deduction_types:
+            raise ValueError(f"Unknown deduction type {d.deduction_code!r}")
+        self._employee_deductions[d.id] = d
+
+    def delete_employee_deduction(self, deduction_id: str) -> None:
+        self._employee_deductions.pop(deduction_id, None)
 
     def save_invite(self, invite: Invite) -> None:
         self.get_client(invite.client_id)

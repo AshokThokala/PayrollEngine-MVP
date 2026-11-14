@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import EmployeeDeductions from '../components/EmployeeDeductions.jsx'
 import { api, money, today } from '../api.js'
 import InfoTip from '../components/InfoTip.jsx'
 import TaxFields, { EMPTY_TAX, taxFromEmployee } from '../components/TaxFields.jsx'
@@ -317,6 +318,8 @@ export default function EmployeesPage({ client, onViewAs, openRequest }) {
             <TaxFields value={tax} onChange={setTax} errors={taxErrors} />
             <div><button className="primary" disabled={busy}>Save tax details</button></div>
           </form>
+
+          <EmployeeDeductions client={client} employee={selected} />
 
           {!selected.exited_on && (
             <div className="form section">

@@ -69,6 +69,18 @@ FIELD_LABELS = {
     "ifsc": "IFSC",
     "account_number": "Bank account number",
     "note": "Note",
+    # deductions
+    "type_code": "Code",
+    "category": "Type",
+    "calc": "Calculated as",
+    "payslip_label": "Name on payslip",
+    "default_value": "Default amount",
+    "max_amount": "Monthly cap",
+    "tax_section": "Tax section",
+    "deduction_code": "Deduction",
+    "value": "Amount",
+    "start_month": "First month",
+    "end_month": "Last month",
     # tax calculator
     "annual_gross": "Yearly gross salary",
     "basic_da": "Yearly basic + DA",

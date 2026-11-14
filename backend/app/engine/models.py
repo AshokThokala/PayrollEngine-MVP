@@ -55,6 +55,7 @@ class PayInputs:
     overtime: Decimal = ZERO
     other_earnings: dict[str, Decimal] = field(default_factory=dict)
     other_deductions: dict[str, Decimal] = field(default_factory=dict)
+    deduction_labels: dict[str, str] = field(default_factory=dict)  # payslip names for other_deductions
     # For TDS projection
     fy_month_index: int = 1  # April = 1 ... March = 12
     ytd_taxable_gross: Decimal = ZERO  # gross paid in earlier months of this FY

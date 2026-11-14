@@ -247,3 +247,50 @@ class EmployeeProfile:
     verified_by: str | None = None
     verified_at: datetime | None = None
     note: str = ""
+
+
+# --- deduction master and standing employee deductions -----------------------------------------
+
+class DeductionCategory(str, enum.Enum):
+    STATUTORY = "statutory"  # worked out by the payroll engine from the compliance rules
+    VOLUNTARY = "voluntary"  # the employee chose it (VPF, NPS, insurance, donations, ...)
+    RECOVERY = "recovery"    # money the employer gets back (advance, loan EMI, notice pay, ...)
+
+
+class DeductionCalc(str, enum.Enum):
+    STATUTORY = "statutory"          # engine computes it; no amount to enter
+    FIXED = "fixed"                  # rupees per month
+    PERCENT_BASIC = "percent_basic"  # % of the month's basic + DA
+    PERCENT_GROSS = "percent_gross"  # % of the month's gross
+
+
+@dataclass
+class DeductionType:
+    """One kind of deduction an employee can have, from the master list."""
+
+    code: str
+    name: str
+    category: DeductionCategory
+    calc: DeductionCalc
+    payslip_label: str = ""
+    default_value: Decimal | None = None   # rupees, or percent for percent calcs
+    max_amount: Decimal | None = None      # cap in rupees per month
+    tax_section: str = ""                  # e.g. 80C, 80CCD(1), 80D, 80G (for information)
+    description: str = ""
+    active: bool = True
+    system: bool = False                   # shipped with the app; code and calculation are fixed
+
+
+@dataclass
+class EmployeeDeduction:
+    """A deduction taken from one employee's pay every month between two months."""
+
+    id: str
+    client_id: str
+    employee_code: str
+    deduction_code: str
+    value: Decimal                 # rupees (fixed) or percent
+    start_month: date              # first day of the first month
+    end_month: date | None = None  # first day of the last month; None = until stopped
+    note: str = ""
+    created_by: str = ""

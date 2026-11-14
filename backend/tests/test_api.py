@@ -302,3 +302,23 @@ def test_add_user_api(client, ops):
     r = client.post("/users", headers=ops, json={"name": "", "email": "bad", "password": "x"})
     assert r.status_code == 422 and {e["field"] for e in r.json()["errors"]} == {"name", "email", "password"}
     assert client.post("/users", json={"name": "A", "email": "a@b.in", "password": "Payroll123"}).status_code == 401
+
+
+def test_deductions_api(client, ops):
+    client.post("/clients", headers=ops, json={"id": "acme", "legal_name": "Acme", "state": "TG"})
+    client.post("/clients/acme/employees", headers=ops, json={
+        "code": "E1", "name": "Ravi", "joined_on": "2026-04-01", "components": {"basic": 30000}})
+    master = client.get("/deduction-types", headers=ops).json()
+    assert any(t["code"] == "vpf" for t in master["types"]) and "fixed" in master["calcs"]
+    r = client.post("/deduction-types", headers=ops, json={"code": "Bad Code", "name": "", "category": "voluntary",
+                                                           "calc": "fixed"})
+    assert r.status_code == 422 and {e["label"] for e in r.json()["errors"]} == {"Code", "Name"}
+    assert client.post("/deduction-types", headers=ops, json={"code": "gym", "name": "Gym", "category": "voluntary",
+                                                              "calc": "fixed"}).status_code == 201
+    d = client.post("/clients/acme/employees/E1/deductions", headers=ops,
+                    json={"deduction_code": "loan_emi", "value": "2500", "start_month": "2026-10"})
+    assert d.status_code == 201 and d.json()["name"] == "Employee loan EMI"
+    run = client.post("/clients/acme/runs", headers=ops, json={"period": "2026-10-01"}).json()
+    slip = run["slips"][0] if isinstance(run["slips"], list) else next(iter(run["slips"].values()))
+    assert any(x["code"] == "loan_emi" for x in slip["deductions"])
+    assert client.delete(f"/clients/acme/employees/E1/deductions/{d.json()['id']}", headers=ops).json() == {"ok": True}
