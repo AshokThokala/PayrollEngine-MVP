@@ -1,5 +1,7 @@
 import { cloneElement, useEffect, useState } from 'react'
+import ClientEmployees from '../components/ClientEmployees.jsx'
 import ClientLocations from '../components/ClientLocations.jsx'
+import PickerSearch from '../components/PickerSearch.jsx'
 import { api } from '../api.js'
 import InfoTip from '../components/InfoTip.jsx'
 
@@ -37,7 +39,7 @@ function Field({ name, label, error, children }) {
 
 const EMPTY = { id: '', legal_name: '', state: 'TG', pan: '', tan: '', pf_code: '', esi_code: '', pt_registration: '' }
 
-export default function ClientsPage({ clients, onCreated, onOpen, onUpdated }) {
+export default function ClientsPage({ clients, onCreated, onOpen, onUpdated, onOpenEmployee }) {
   const [mode, setMode] = useState('none') // none | add | edit
   const [selectedId, setSelectedId] = useState(null)
   const [form, setForm] = useState(EMPTY)
@@ -98,40 +100,30 @@ export default function ClientsPage({ clients, onCreated, onOpen, onUpdated }) {
 
   const editing = mode === 'edit'
 
+  const current = clients.find((c) => c.id === selectedId)
+
   return (
-    <div className="grid">
-      <section className="card">
-        <div className="run-head">
-          <h2>Clients</h2>
-          <button className="primary" onClick={startAdd}>+ Add client</button>
-        </div>
-        {clients.length === 0 ? (
-          <p className="muted">No clients yet. Add your first client firm.</p>
-        ) : (
-          <div className="table-wrap">
-            <table className="clickable">
-              <thead>
-                <tr><th>Legal name</th><th>ID</th><th>State</th></tr>
-              </thead>
-              <tbody>
-                {clients.map((c) => (
-                  <tr key={c.id} tabIndex={0} className={selectedId === c.id ? 'selected' : ''}
-                    onClick={() => select(c)} onKeyDown={(e) => { if (e.key === 'Enter') select(c) }}>
-                    <td><strong>{c.legal_name}</strong></td>
-                    <td>{c.id}</td>
-                    <td>{c.state}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
+    <div className="stack">
+      <section className="card search-bar">
+        <PickerSearch
+          items={clients}
+          match={(c, q) => c.legal_name.toLowerCase().includes(q) || c.id.includes(q) || (c.pan || '').toLowerCase().includes(q)}
+          render={(c) => (
+            <><span className="gs-icon" aria-hidden="true">▦</span>
+              <span className="gs-text"><strong>{c.legal_name}</strong><span className="muted small">{c.id} · {c.state}</span></span></>
+          )}
+          onPick={select}
+          placeholder={`Search ${clients.length} client${clients.length === 1 ? '' : 's'} by name, ID or PAN`}
+          label="Search clients"
+        />
+        <button className="primary" onClick={startAdd}>+ Add client</button>
       </section>
 
+      <div className={editing ? 'grid client-grid' : 'stack'}>
       {mode === 'none' ? (
         <section className="card empty-state">
-          <h2>Client details</h2>
-          <p className="muted">Select a client on the left to see and edit its details.</p>
+          <h2>Find a client</h2>
+          <p className="muted">{clients.length ? 'Search above to open a client: its details, locations and all its employees.' : 'No clients yet. Add your first client firm.'}</p>
         </section>
       ) : (
         <section className="card allow-overflow">
@@ -175,6 +167,8 @@ export default function ClientsPage({ clients, onCreated, onOpen, onUpdated }) {
           {editing && <ClientLocations clientId={selectedId} states={states} />}
         </section>
       )}
+      {editing && current && <ClientEmployees client={current} onOpenEmployee={onOpenEmployee} onAddEmployee={() => onOpen(current.id)} />}
+      </div>
     </div>
   )
 }

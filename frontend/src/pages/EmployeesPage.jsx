@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import EmployeeDeductions from '../components/EmployeeDeductions.jsx'
+import PickerSearch from '../components/PickerSearch.jsx'
 import EmployeeDetails, { ageFrom } from '../components/EmployeeDetails.jsx'
 import { api, money, today } from '../api.js'
 import InfoTip from '../components/InfoTip.jsx'
@@ -294,42 +295,28 @@ export default function EmployeesPage({ client, onViewAs, openRequest }) {
   )
 
   return (
-    <div className="grid">
-      <section className="card">
-        <div className="run-head">
-          <h2>Employees <span className="tag">{employees.filter((e) => !e.exited_on).length} active</span></h2>
-          <button className="primary" onClick={startAdd}>+ Add employee</button>
-        </div>
-        <input className="search" placeholder="Search by name or code" value={search}
-          onChange={(e) => setSearch(e.target.value)} aria-label="Search employees" />
-        {shown.length === 0 ? (
-          <p className="muted">{employees.length ? 'No employees match.' : 'No employees yet.'}</p>
-        ) : (
-          <div className="table-wrap">
-            <table className="clickable">
-              <thead><tr><th>Name</th><th>Designation</th><th className="num">Monthly pay</th><th>Status</th></tr></thead>
-              <tbody>
-                {shown.map((emp) => (
-                  <tr key={emp.code} tabIndex={0}
-                    className={`${emp.exited_on ? 'dim' : ''} ${selectedCode === emp.code ? 'selected' : ''}`}
-                    onClick={() => select(emp)} onKeyDown={(e) => { if (e.key === 'Enter') select(emp) }}>
-                    <td><strong>{emp.name}</strong> <span className="muted small">{emp.code}</span></td>
-                    <td className="small">{emp.designation || <span className="muted">—</span>}{emp.department ? <span className="muted"> · {emp.department}</span> : ''}</td>
-                    <td className="num">{emp.pay_type === 'hourly' ? `₹${Number(emp.hourly_rate)}/h` : money(emp.monthly_total)}</td>
-                    <td>{emp.exited_on ? <span className="tag">Left {emp.exited_on}</span> : <span className="tag locked">Active</span>}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
+    <div className="stack">
+      <section className="card search-bar">
+        <PickerSearch
+          items={employees}
+          match={(e, q) => e.name.toLowerCase().includes(q) || e.code.toLowerCase().includes(q)
+            || (e.designation || '').toLowerCase().includes(q) || (e.department || '').toLowerCase().includes(q)}
+          render={(e) => (
+            <><span className="gs-icon" aria-hidden="true">☺</span>
+              <span className="gs-text"><strong>{e.name}</strong>
+                <span className="muted small">{e.code}{e.designation ? ` · ${e.designation}` : ''}{e.exited_on ? ' · left' : ''}</span></span></>
+          )}
+          onPick={select}
+          placeholder={`Search ${employees.filter((e) => !e.exited_on).length} employees of ${client.legal_name} by name, code or designation`}
+          label="Search employees"
+        />
+        <button className="primary" onClick={startAdd}>+ Add employee</button>
       </section>
 
       {mode === 'none' && (
         <section className="card empty-state">
-          <h2>Employee details</h2>
-          <p className="muted">Select an employee on the left to see and edit their salary, statutory settings and tax, or add a new one.</p>
-          <button onClick={startAdd}>+ Add employee</button>
+          <h2>Find an employee</h2>
+          <p className="muted">{employees.length ? 'Search above to open an employee: details, salary, statutory settings, tax and deductions. To see everyone, open the client on the Clients page.' : 'No employees yet. Add the first one.'}</p>
         </section>
       )}
 
