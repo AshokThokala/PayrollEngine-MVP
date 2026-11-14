@@ -576,3 +576,12 @@ dl.details-grid .fact dt { font-size: 0.75rem; color: var(--muted); }
 dl.details-grid .fact dd { margin: 2px 0 0; }
 .details-grid label { display: flex; flex-direction: column; gap: 4px; }
 @media (max-width: 640px) { .details-grid { grid-template-columns: 1fr; } .details-grid .wide { grid-column: auto; } }
+
+/* --- hide the menu completely --------------------------------------------------------------- */
+.shell.menu-hidden { grid-template-columns: minmax(0, 1fr); }
+.shell.menu-hidden .sidebar { display: none; }
+.menu-toggle { flex: none; width: 36px; height: 36px; padding: 0; border-radius: 10px; border: 1px solid var(--line);
+  background: #fff; color: var(--navy); font-size: 1.05rem; cursor: pointer; display: grid; place-items: center; }
+.menu-toggle:hover { background: var(--brand-soft); color: var(--brand); }
+.topbar-logo { width: 32px; height: 32px; font-size: 0.7rem; }
+.topbar { justify-content: flex-start; }
