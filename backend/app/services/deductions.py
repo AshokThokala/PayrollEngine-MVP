@@ -37,12 +37,17 @@ def seed_deduction_types(repo) -> int:
     for raw in json.loads(SEED_FILE.read_text())["types"]:
         if repo.get_deduction_type(raw["code"]):
             continue
-        repo.save_deduction_type(DeductionType(
-            code=raw["code"], name=raw["name"], category=DeductionCategory(raw["category"]),
-            calc=DeductionCalc(raw["calc"]), payslip_label=raw.get("payslip_label", ""),
-            default_value=None if raw.get("default_value") is None else D(raw["default_value"]),
-            max_amount=None if raw.get("max_amount") is None else D(raw["max_amount"]),
-            tax_section=raw.get("tax_section", ""), description=raw.get("description", ""), system=True))
+        try:
+            repo.save_deduction_type(DeductionType(
+                code=raw["code"], name=raw["name"], category=DeductionCategory(raw["category"]),
+                calc=DeductionCalc(raw["calc"]), payslip_label=raw.get("payslip_label", ""),
+                default_value=None if raw.get("default_value") is None else D(raw["default_value"]),
+                max_amount=None if raw.get("max_amount") is None else D(raw["max_amount"]),
+                tax_section=raw.get("tax_section", ""), description=raw.get("description", ""), system=True))
+        except Exception:  # another worker seeded it at the same moment
+            if repo.get_deduction_type(raw["code"]) is None:
+                raise
+            continue
         added += 1
     return added
 

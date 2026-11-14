@@ -170,3 +170,37 @@ def test_add_admin_users(repo):
     with pytest.raises(ServiceError) as exc:
         a.create_admin(asha, name="", email="kiran@acme.in", password="weak")
     assert set(exc.value.errors) == {"name", "email", "password"}
+
+
+def test_login_lockout_and_password_change(repo):
+    svc, a = setup(repo)
+    a.signup_client(Client(id="acme", legal_name="Acme", state="TG"), "Asha", "asha@acme.in", "Payroll123")
+    for _ in range(5):
+        with pytest.raises(ServiceError, match="incorrect"):
+            a.login("asha@acme.in", "wrong-pass1")
+    with pytest.raises(ServiceError, match="Too many failed attempts"):
+        a.login("asha@acme.in", "Payroll123")  # even the right password waits
+    a._failures.clear()
+    user, _ = a.login("asha@acme.in", "Payroll123")
+
+    with pytest.raises(ServiceError) as e:
+        a.change_password(user, "nope", "NewPass123")
+    assert e.value.field == "current_password"
+    with pytest.raises(ServiceError) as e:
+        a.change_password(user, "Payroll123", "short")
+    assert e.value.field == "new_password"
+    a.change_password(user, "Payroll123", "NewPass123")
+    assert a.login("asha@acme.in", "NewPass123")[0].id == user.id
+
+
+def test_admin_password_reset_limits(repo):
+    svc, a = setup(repo)
+    ops = a.create_platform_admin("ops@cp.in", "Payroll123")
+    asha = a.signup_client(Client(id="acme", legal_name="Acme", state="TG"), "Asha", "asha@acme.in", "Payroll123")
+    other = a.signup_client(Client(id="other", legal_name="Other", state="TG"), "O", "o@other.in", "Payroll123")
+    a.reset_password(ops, asha.id, "Temp12345")
+    assert a.login("asha@acme.in", "Temp12345")
+    with pytest.raises(AccessDenied):
+        a.reset_password(asha, other.id, "Temp12345")
+    with pytest.raises(AccessDenied):
+        a.reset_password(asha, ops.id, "Temp12345")

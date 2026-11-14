@@ -19,7 +19,9 @@ function cell(col, value) {
 
 function toCsv(report) {
   const esc = (v) => {
-    const s = v === null || v === undefined ? '' : String(v)
+    let s = v === null || v === undefined ? '' : String(v)
+    // Text starting with = + - @ would run as a formula in Excel; numbers stay as they are.
+    if (/^[=+\-@\t\r]/.test(s) && Number.isNaN(Number(s))) s = `'${s}`
     return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s
   }
   const head = report.columns.map((c) => esc(c.label)).join(',')

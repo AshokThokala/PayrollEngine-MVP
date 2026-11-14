@@ -16,6 +16,9 @@ from ..engine.models import Payslip
 from .payroll_service import PayrollService, ServiceError
 
 WRONG_LOGIN = "Email or password is incorrect"
+MAX_FAILED_LOGINS = 5          # failures allowed within LOCKOUT_SECONDS ...
+LOCKOUT_SECONDS = 15 * 60      # ... before logins for that email pause for this long
+_DUMMY_HASH = auth.hash_password("timing-equaliser-not-a-real-password-1")
 
 
 class AccessDenied(PermissionError):
@@ -26,6 +29,7 @@ class AuthService:
     def __init__(self, payroll: PayrollService):
         self.payroll = payroll
         self.repo = payroll.repo
+        self._failures: dict[str, list] = {}  # failed logins per email (this process); slows password guessing
 
     # --- helpers -------------------------------------------------------------------
     def _new_user(self, *, email: str, name: str, password: str, role: Role,
@@ -98,10 +102,28 @@ class AuthService:
                             f"employee {client_id}/{employee_code}, pending approval")
         return user
 
+    def _recent_failures(self, key: str) -> list:
+        now = self.payroll.clock().timestamp()
+        recent = [t for t in self._failures.get(key, []) if now - t < LOCKOUT_SECONDS]
+        self._failures[key] = recent
+        return recent
+
     def login(self, email: str, password: str) -> tuple[User, str]:
-        user = self.repo.find_user_by_email(email or "")
-        if user is None or not auth.verify_password(password or "", user.password_hash):
+        key = (email or "").strip().lower()
+        recent = self._recent_failures(key)
+        if len(recent) >= MAX_FAILED_LOGINS:
+            wait = int(LOCKOUT_SECONDS - (self.payroll.clock().timestamp() - recent[0])) // 60 + 1
+            raise ServiceError(f"Too many failed attempts. Try again in {wait} minute{'s' if wait != 1 else ''}.")
+        user = self.repo.find_user_by_email(key)
+        # Check a password even when the email is unknown, so timing doesn't reveal which emails exist.
+        ok = auth.verify_password(password or "", user.password_hash if user else _DUMMY_HASH)
+        if user is None or not ok:
+            recent.append(self.payroll.clock().timestamp())
+            self._failures[key] = recent
+            if len(recent) >= MAX_FAILED_LOGINS:
+                self.payroll._audit(key or "-", "user.login_locked", f"login/{key}", f"{len(recent)} failed attempts")
             raise ServiceError(WRONG_LOGIN)
+        self._failures.pop(key, None)
         if user.status == UserStatus.PENDING:
             raise ServiceError("Your account is waiting for approval from your employer")
         if user.status == UserStatus.DISABLED:
@@ -188,6 +210,42 @@ class AuthService:
         target.status = status
         self.repo.save_user(target)
         self.payroll._audit(actor.email, f"user.{status.value}", f"user/{target.id}", target.email)
+        return target
+
+    def change_password(self, actor: User, current: str, new: str) -> None:
+        """A user changes their own password."""
+        if actor.impersonated_by:
+            raise AccessDenied("Not available while viewing as an employee")
+        user = self.repo.get_user(actor.id)
+        if not auth.verify_password(current or "", user.password_hash):
+            raise ServiceError("Your current password is incorrect", field="current_password")
+        problem = auth.password_problem(new or "")
+        if problem:
+            raise ServiceError(problem, field="new_password")
+        if auth.verify_password(new, user.password_hash):
+            raise ServiceError("Choose a password different from the current one", field="new_password")
+        user.password_hash = auth.hash_password(new)
+        self.repo.save_user(user)
+        self.payroll._audit(user.email, "user.password", f"user/{user.id}", "changed own password")
+
+    def reset_password(self, actor: User, user_id: str, new: str) -> User:
+        """An admin sets a temporary password for a user they manage (e.g. a forgotten password)."""
+        target = self.repo.get_user(user_id)
+        if actor.role != Role.ADMIN or actor.impersonated_by:
+            raise AccessDenied("Admins only")
+        if target.id == actor.id:
+            raise ServiceError("Use Change password for your own account")
+        if target.client_id is None and not actor.is_platform_admin:
+            raise AccessDenied("Only platform admins can reset a platform admin's password")
+        if target.client_id is not None:
+            self.check_client(actor, target.client_id)
+        problem = auth.password_problem(new or "")
+        if problem:
+            raise ServiceError(problem, field="password")
+        target.password_hash = auth.hash_password(new)
+        self.repo.save_user(target)
+        self._failures.pop(target.email, None)
+        self.payroll._audit(actor.email, "user.password_reset", f"user/{target.id}", target.email)
         return target
 
     # --- employee self-service -----------------------------------------------------------

@@ -363,3 +363,17 @@ def test_time_entry_api(client, ops):
     assert client.post("/clients/acme/time/2026-10/approve", headers=ops, json={}).json() == {"changed": 1}
     r = client.put("/clients/acme/employees/H1/time/2026-10", headers=ops, json={"days": {"40": {"hours": 1}}})
     assert r.status_code == 422
+
+
+def test_password_and_reopen_api(client, ops):
+    r = client.put("/auth/password", headers=ops, json={"current_password": "wrong", "new_password": "NewPass123"})
+    assert r.status_code == 409 and r.json()["errors"][0]["label"] == "Current password"
+    client.post("/clients", headers=ops, json={"id": "acme", "legal_name": "Acme", "state": "TG"})
+    client.post("/clients/acme/employees", headers=ops, json={
+        "code": "E1", "name": "Ravi", "joined_on": "2026-04-01", "components": {"basic": 30000}})
+    r = client.post("/clients/acme/runs", headers=ops, json={"period": "2026-10-01", "inputs": {"E1": {"paid_days": 40}}})
+    assert r.status_code == 409 and "between 0 and 31" in r.json()["detail"]
+    run = client.post("/clients/acme/runs", headers=ops, json={"period": "2026-10-01"}).json()
+    client.post(f"/runs/{run['id']}/approve", headers=ops)
+    r = client.post(f"/runs/{run['id']}/reopen", headers=ops, json={"reason": "fix attendance"})
+    assert r.status_code == 200 and r.json()["status"] == "draft"

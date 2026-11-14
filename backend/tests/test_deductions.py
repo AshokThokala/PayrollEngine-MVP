@@ -134,3 +134,15 @@ def test_client_level_controls_employee_deductions(svc):
         ds.set_client(ACME, "acme", "vpf", {"enabled": True, "default_value": "150"})
     assert "percentage" in e.value.errors["default_value"]
     assert len(ds.for_client("acme")) == 1
+
+
+def test_percent_deduction_for_hourly_staff_uses_hours(svc):
+    from app.services.timesheets import TimeService
+    svc.add_employee(EmployeeRecord("acme", Employee(code="H1", name="Hourly", pay_type="hourly", hourly_rate=200),
+                                    SalaryStructure({}), date(2026, 4, 1)), "ops")
+    ds = DeductionService(svc)
+    ds.save_for_employee(OPS, "acme", "H1", {"deduction_code": "vpf", "value": "10", "start_month": "2026-10"})
+    TimeService(svc).save(OPS, "acme", "H1", "2026-10", {str(d): {"hours": 8} for d in range(1, 11)})  # 80 h
+    slip = svc.create_draft("acme", date(2026, 10, 1), user="ops").slips["H1"]
+    vpf = next(d.amount for d in slip.deductions if d.code == "vpf")
+    assert vpf == Decimal("1600.00")  # 10% of 80 h x 200

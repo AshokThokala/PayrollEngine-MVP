@@ -38,7 +38,15 @@ from ..services.deductions import CALC_LABELS, TAX_SECTIONS, DeductionService, c
 from . import errors
 from . import schemas as s
 
-app = FastAPI(title="ClearPay4U API", description="ClearPay4U — zero-penalty payroll", version="0.4.0")
+# API docs (/docs, /redoc, /openapi.json) are on by default; production turns them off with API_DOCS=false.
+_DOCS = os.environ.get("API_DOCS", "true").strip().lower() not in ("0", "false", "no", "off")
+app = FastAPI(title="ClearPay4U API", description="ClearPay4U — zero-penalty payroll", version="0.5.0",
+              docs_url="/docs" if _DOCS else None, redoc_url="/redoc" if _DOCS else None,
+              openapi_url="/openapi.json" if _DOCS else None)
+if not os.environ.get("SECRET_KEY"):
+    import logging
+    logging.getLogger("clearpay4u").warning(
+        "SECRET_KEY is not set: logins end on restart and differ between workers. Set it in production.")
 app.add_middleware(GZipMiddleware, minimum_size=1000)  # payslip and report responses compress well
 
 
@@ -311,6 +319,14 @@ def approve_run(run_id: str, actor: User = Depends(admin_user),
     return _run_out(svc.approve(run_id, actor.email))
 
 
+@app.post("/runs/{run_id}/reopen", response_model=s.RunOut)
+def reopen_run(run_id: str, body: s.ReopenIn, actor: User = Depends(admin_user),
+               svc: PayrollService = Depends(get_service), auth: AuthService = Depends(get_auth)):
+    """Approved -> draft, so it can be corrected and recalculated. Locked runs stay final."""
+    auth.check_client(actor, svc.repo.get_run(run_id).client_id)
+    return _run_out(svc.reopen(run_id, actor.email, body.reason))
+
+
 @app.post("/runs/{run_id}/lock", response_model=list[s.FilingOut])
 def lock_run(run_id: str, actor: User = Depends(admin_user),
              svc: PayrollService = Depends(get_service), auth: AuthService = Depends(get_auth)):
@@ -435,6 +451,19 @@ def me(user: User = Depends(current_user)):
 
 
 # --- user management (admins) -------------------------------------------------------------
+
+@app.put("/auth/password")
+def change_password(body: s.PasswordChangeIn, user: User = Depends(current_user), auth: AuthService = Depends(get_auth)):
+    auth.change_password(user, body.current_password, body.new_password)
+    return {"ok": True}
+
+
+@app.post("/users/{user_id}/password", response_model=s.UserOut)
+def reset_password(user_id: str, body: s.PasswordResetIn, actor: User = Depends(admin_user),
+                   auth: AuthService = Depends(get_auth)):
+    """Set a temporary password for a user you manage."""
+    return _user_out(auth.reset_password(actor, user_id, body.password))
+
 
 @app.get("/users", response_model=list[s.UserOut])
 def list_users(client_id: str | None = None, limit: int = Query(500, ge=1, le=2000),

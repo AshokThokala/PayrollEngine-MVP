@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { api, money } from '../api.js'
+import ChangePassword from '../components/ChangePassword.jsx'
 import MyOnboarding from '../components/MyOnboarding.jsx'
 import PayslipView from '../components/PayslipView.jsx'
 import TaxFields, { taxFromEmployee } from '../components/TaxFields.jsx'
@@ -56,6 +57,7 @@ export default function EmployeePortal({ user, onLogout }) {
         </div>
         <div className="inline">
           <span className="muted small hide-sm">{viewingAs ? `Viewing as ${user.name}` : user.email}</span>
+          {!viewingAs && <ChangePassword className="ghost light" />}
           <button className="ghost light" onClick={onLogout}>{viewingAs ? 'Back to admin' : 'Log out'}</button>
         </div>
       </header>
